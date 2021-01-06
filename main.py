@@ -50,18 +50,40 @@ class Game:
             self.player.body_sprite.update(self)
 
             time_delta = self.clock.tick(self.fps)
-            self.draw()
+            self.draw(time_delta)
 
             pygame.display.flip()
             self.clock.tick(self.fps)
         pygame.quit()
 
-    def draw(self):
+    def draw(self, time_delta):
         for obj in self.objects:
             obj.render(self.screen)
 
     def add_handler(self, event_type, handler):
         self._handlers[event_type].append(handler)
+
+
+class SpriteObject(pygame.sprite.Sprite):
+    """
+    Класс для работы со спрайтом. Любой спрайт ассоциируются с некоторым изображением,
+    поэтому для урпощения жизни были добавлены параметры для создания изображения вместе с спрайтом
+    """
+
+    def __init__(self, image_path: str, coords: Tuple[int, int], size: Tuple[int, int] = None,
+                 image_dir: str = 'assets', *groups: pygame.sprite.AbstractGroup):
+        super().__init__(*groups)
+        self.image_dir = image_dir
+        self.image_path = image_path
+        self.size = size
+        self.coords = coords
+
+        self.image = load_image(image_path, image_dir, size)
+        self.rect = pygame.Rect(coords[0], coords[1], *self.image.get_size())
+
+    def update(self, game: 'Game'):
+        self.image = load_image(self.image_path, self.image_dir, self.size)
+        self.rect = pygame.Rect(self.coords[0], self.coords[1], *self.image.get_size())
 
 
 class AnimatedSprite(pygame.sprite.Sprite):
@@ -78,7 +100,7 @@ class AnimatedSprite(pygame.sprite.Sprite):
                 images.append(load_image(image_dir, sprite_path, size))
             self.action_sprites[action] = images[:]
 
-        self.__speed = 0.7
+        self.speed = 0.7
         self._started = False
         self.__counter = 0
         self._index = 0
@@ -97,7 +119,7 @@ class AnimatedSprite(pygame.sprite.Sprite):
         """
         self.change_current_action(action)
         self._started = True
-        self.__speed = speed * 0.1
+        self.speed = speed * 0.1
         self._index = 0
 
     def change_current_action(self, action):
@@ -122,7 +144,7 @@ class AnimatedSprite(pygame.sprite.Sprite):
         """
         if self.is_started():
             # увеличиваем счётчик на каждой итерации на некотое небольшое значение
-            self.__counter += self.__counter + 1 * self.__speed
+            self.__counter += self.__counter + 1 * self.speed
 
             if self.__counter >= 1:
                 self._index = (self._index + 1) % len(self.action_sprites[self.current_action])
@@ -137,13 +159,13 @@ class PlayerBodyParts(AnimatedSprite):
         super().__init__(images_paths, coords)
         self.parent = parent
 
-        self.walking_right_sprites = self.action_sprites
-        self.walking_left_sprites = dict()
+        self.right_sprites = self.action_sprites
+        self.left_sprites = dict()
 
         for action, images in self.action_sprites.items():
             rotated_images = [pygame.transform.flip(i, True, False) for i in
                               self.action_sprites[action]]
-            self.walking_left_sprites[action] = rotated_images
+            self.left_sprites[action] = rotated_images
 
     def start(self, action='idle', speed: float = 1):
         """
@@ -158,8 +180,29 @@ class PlayerBodyParts(AnimatedSprite):
             'walking-x') or self.parent.direction_y is None)):
             self.change_current_action(action)
             self._started = True
-            self.__speed = speed * 0.1
+            self.speed = speed * 0.1
             self._index = 0
+
+
+class PlayerAmmo:
+    def __init__(self, coords, direction_x, direction_y, ammo_speed=4):
+        self.coords = coords[0], coords[1]
+        if direction_x == 'left':
+            self.speed_x = -ammo_speed
+        elif direction_x == 'right':
+            self.speed_x = ammo_speed
+        else:
+            self.speed_x = 0
+
+        if direction_y == 'up':
+            self.speed_y = -ammo_speed
+        elif direction_y == 'down':
+            self.speed_y = ammo_speed
+        else:
+            self.speed_y = 0
+
+    def move(self):
+        self.coords = self.coords[0] + self.speed_x, self.coords[1] + self.speed_x
 
 
 class Player(AnimatedSprite):
@@ -197,13 +240,15 @@ class Player(AnimatedSprite):
             self.direction_x = 'left'
             for element in (self.head_sprite, self.body_sprite):
                 element.rect.move_ip(-self.speed, 0)
-                element.action_sprites = self.body_sprite.walking_left_sprites
+
+                element.action_sprites = element.left_sprites
+
                 element.start(action='walking-x')
         elif keys[pygame.K_d]:
             self.direction_x = 'right'
             for element in (self.head_sprite, self.body_sprite):
                 element.rect.move_ip(self.speed, 0)
-                element.action_sprites = self.body_sprite.walking_right_sprites
+                element.action_sprites = element.right_sprites
                 element.start(action='walking-x')
         else:
             self.direction_x = None
@@ -236,13 +281,24 @@ class Player(AnimatedSprite):
         keys = pygame.key.get_pressed()
         if list(filter(lambda x: keys[x], [pygame.K_a, pygame.K_d, pygame.K_s, pygame.K_w])):
             self.move()
-        elif list(filter(lambda x: keys[x], [pygame.KEYUP, pygame.KEYDOWN, pygame.K_LEFT,
-                                             pygame.K_RIGHT])):
+        if list(filter(lambda x: keys[x], [pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT,
+                                           pygame.K_RIGHT])):
             self.attack()
 
     def attack(self):
-        pass
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            self.head_sprite.action_sprites = self.head_sprite.left_sprites
+            self.head_sprite.start(action='attack-x', speed=1)
+        elif keys[pygame.K_RIGHT]:
+            self.head_sprite.action_sprites = self.head_sprite.right_sprites
+            self.head_sprite.start(action='attack-x', speed=1)
+        elif keys[pygame.K_UP]:
+            self.head_sprite.start(action='attack-up', speed=1)
+        elif keys[pygame.K_DOWN]:
+            self.head_sprite.start(action='attack-down', speed=1)
+
 
 if __name__ == '__main__':
     game = Game
-game().run()
+    game().run()
