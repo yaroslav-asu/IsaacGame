@@ -34,6 +34,7 @@ class Game:
         self.background = load_image('assets/room', 'room-background.png')
         self._handlers = defaultdict(list)
 
+        # self.add_handler(pygame.KEYDOWN, self.player.key_press_handler)
         self.add_handler(pygame.KEYUP, self.player.stop_move)
 
     def run(self):
@@ -44,20 +45,20 @@ class Game:
                     self.running = False
                 for handler in self._handlers.get(event.type, []):
                     handler(event)
-            self.player.move()
+            self.player.key_press_handler()
             self.player.head_sprite.update(self)
             self.player.body_sprite.update(self)
 
             time_delta = self.clock.tick(self.fps)
-            self.draw(time_delta)
+            self.draw()
 
             pygame.display.flip()
             self.clock.tick(self.fps)
         pygame.quit()
 
-    def draw(self, time_delta):
+    def draw(self):
         for obj in self.objects:
-            obj.render(self.screen, time_delta)
+            obj.render(self.screen)
 
     def add_handler(self, event_type, handler):
         self._handlers[event_type].append(handler)
@@ -68,16 +69,6 @@ class AnimatedSprite(pygame.sprite.Sprite):
                  size=None, current_action='idle', *groups):
         super().__init__(*groups)
 
-        self.action_sprites = dict()
-        # подгружаем изображения из спрайтов
-        # for images_dict_num in range(len(images_paths)):
-        #     for action, paths in images_paths[images_dict_num].items():
-        #         if action not in self.all_action_sprites.keys():
-        #             self.all_action_sprites[action] = []
-        #         images = []
-        #         for sprite_path in paths:
-        #             images.append(load_image(image_dir, sprite_path, size))
-        #         self.all_action_sprites[action].append(images[:])
         self.action_sprites = dict()
         for action, paths in images_paths.items():
             if action not in self.action_sprites.keys():
@@ -94,7 +85,6 @@ class AnimatedSprite(pygame.sprite.Sprite):
         self.current_action = current_action
         self.coords = coords
 
-        # self.action_sprites = dict()
         self.image = self.action_sprites[self.current_action][self._index]
         self.rect = pygame.Rect(self.coords[0], self.coords[1], *self.image.get_size())
 
@@ -205,39 +195,29 @@ class Player(AnimatedSprite):
         keys = pygame.key.get_pressed()
         if keys[pygame.K_a]:
             self.direction_x = 'left'
-            self.head_sprite.rect.move_ip(-self.speed, 0)
-            self.body_sprite.rect.move_ip(-self.speed, 0)
-
-            self.head_sprite.action_sprites = self.head_sprite.walking_left_sprites
-            self.body_sprite.action_sprites = self.body_sprite.walking_left_sprites
-
-            self.head_sprite.start(action='walking-x')
-            self.body_sprite.start(action='walking-x')
+            for element in (self.head_sprite, self.body_sprite):
+                element.rect.move_ip(-self.speed, 0)
+                element.action_sprites = self.body_sprite.walking_left_sprites
+                element.start(action='walking-x')
         elif keys[pygame.K_d]:
             self.direction_x = 'right'
-            self.head_sprite.rect.move_ip(self.speed, 0)
-            self.body_sprite.rect.move_ip(self.speed, 0)
-
-            self.head_sprite.action_sprites = self.head_sprite.walking_right_sprites
-            self.body_sprite.action_sprites = self.body_sprite.walking_right_sprites
-
-            self.head_sprite.start(action='walking-x')
-            self.body_sprite.start(action='walking-x')
+            for element in (self.head_sprite, self.body_sprite):
+                element.rect.move_ip(self.speed, 0)
+                element.action_sprites = self.body_sprite.walking_right_sprites
+                element.start(action='walking-x')
         else:
             self.direction_x = None
 
         if keys[pygame.K_w]:
             self.direction_y = 'up'
-            self.head_sprite.start(action='walking-up')
-            self.body_sprite.start(action='walking-up')
-            self.head_sprite.rect.move_ip(0, -self.speed)
-            self.body_sprite.rect.move_ip(0, -self.speed)
+            for element in (self.head_sprite, self.body_sprite):
+                element.start(action='walking-up')
+                element.rect.move_ip(0, -self.speed)
         elif keys[pygame.K_s]:
             self.direction_y = 'down'
-            self.head_sprite.start(action='walking-down')
-            self.body_sprite.start(action='walking-down')
-            self.head_sprite.rect.move_ip(0, self.speed)
-            self.body_sprite.rect.move_ip(0, self.speed)
+            for element in (self.head_sprite, self.body_sprite):
+                element.start(action='walking-down')
+                element.rect.move_ip(0, self.speed)
         else:
             self.direction_y = None
 
@@ -248,24 +228,21 @@ class Player(AnimatedSprite):
             self.head_sprite.start('idle')
             self.body_sprite.start('idle')
 
-    def render(self, screen, time_delta: int):
+    def render(self, screen):
         screen.blit(self.body_sprite.image, self.body_sprite.rect)
         screen.blit(self.head_sprite.image, self.head_sprite.rect)
 
-    # def setup_action_sprites(self):
-    #     self.action_sprites = dict()
-    #
-    #     for key in self.all_action_sprites.keys():
-    #         image = self.all_action_sprites[key][0][0]
-    #         for layer_num in range(1, len(self.all_action_sprites[key][0]) - 1):
-    #             image.blit(self.all_action_sprites[key][layer_num], coords[layer_num])
-    #
-    #         self.action_sprites[key] = image
-    #     pprint(self.action_sprites[self.current_action])
-    #     self.image = self.action_sprites[self.current_action][self._index]
-    #     self.rect = pygame.Rect(self.coords[0], self.coords[1], *self.image.get_size())
+    def key_press_handler(self):
+        keys = pygame.key.get_pressed()
+        if list(filter(lambda x: keys[x], [pygame.K_a, pygame.K_d, pygame.K_s, pygame.K_w])):
+            self.move()
+        elif list(filter(lambda x: keys[x], [pygame.KEYUP, pygame.KEYDOWN, pygame.K_LEFT,
+                                             pygame.K_RIGHT])):
+            self.attack()
 
+    def attack(self):
+        pass
 
 if __name__ == '__main__':
     game = Game
-    game().run()
+game().run()
