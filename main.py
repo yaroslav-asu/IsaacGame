@@ -18,7 +18,7 @@ def load_image(directory, path, size=None):
 
 
 class Game:
-    def __init__(self, width: int = 959, height: int = 540, name: str = 'Esaac', fps: int = 40):
+    def __init__(self, width: int = 959, height: int = 540, name: str = 'Esaac', fps: int = 60):
         pygame.init()
         pygame.display.set_caption(name)
 
@@ -87,7 +87,7 @@ class AnimatedSprite(pygame.sprite.Sprite):
                 images.append(load_image(image_dir, sprite_path, size))
             self.action_sprites[action] = images[:]
 
-        self.__speed = 1.0
+        self.__speed = 0.7
         self._started = False
         self.__counter = 0
         self._index = 0
@@ -147,6 +147,14 @@ class PlayerBodyParts(AnimatedSprite):
         super().__init__(images_paths, coords)
         self.parent = parent
 
+        self.walking_right_sprites = self.action_sprites
+        self.walking_left_sprites = dict()
+
+        for action, images in self.action_sprites.items():
+            rotated_images = [pygame.transform.flip(i, True, False) for i in
+                              self.action_sprites[action]]
+            self.walking_left_sprites[action] = rotated_images
+
     def start(self, action='idle', speed: float = 1):
         """
         Начинает воспроизводить анимацию
@@ -184,19 +192,11 @@ class Player(AnimatedSprite):
         self.head_sprite = PlayerBodyParts(head_sprite_map, (coords[0] - 10, coords[1] - 39), self)
         self.body_sprite = PlayerBodyParts(body_sprite_map, coords, self)
 
-        self.walking_right_sprites = self.action_sprites
-        self.walking_left_sprites = dict()
-
-        for action, images in self.action_sprites.items():
-            rotated_images = [pygame.transform.flip(i, True, False) for i in
-                              self.action_sprites[action]]
-            self.walking_left_sprites[action] = rotated_images
-
         self.x, self.y = coords
         self.direction_x = None
         self.direction_y = None
 
-        self.speed = 4
+        self.speed = 6
 
         self.sliding_time = 0
         self.action_sprites = dict()
@@ -207,14 +207,20 @@ class Player(AnimatedSprite):
             self.direction_x = 'left'
             self.head_sprite.rect.move_ip(-self.speed, 0)
             self.body_sprite.rect.move_ip(-self.speed, 0)
-            # self.action_sprites = self.walking_left_sprites
+
+            self.head_sprite.action_sprites = self.head_sprite.walking_left_sprites
+            self.body_sprite.action_sprites = self.body_sprite.walking_left_sprites
+
             self.head_sprite.start(action='walking-x')
             self.body_sprite.start(action='walking-x')
         elif keys[pygame.K_d]:
             self.direction_x = 'right'
             self.head_sprite.rect.move_ip(self.speed, 0)
             self.body_sprite.rect.move_ip(self.speed, 0)
-            # self.action_sprites = self.walking_right_sprites
+
+            self.head_sprite.action_sprites = self.head_sprite.walking_right_sprites
+            self.body_sprite.action_sprites = self.body_sprite.walking_right_sprites
+
             self.head_sprite.start(action='walking-x')
             self.body_sprite.start(action='walking-x')
         else:
