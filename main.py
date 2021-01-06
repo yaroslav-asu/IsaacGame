@@ -45,7 +45,8 @@ class Game:
                 for handler in self._handlers.get(event.type, []):
                     handler(event)
             self.player.move()
-            self.player.update(self)
+            self.player.head_sprite.update(self)
+            self.player.body_sprite.update(self)
 
             time_delta = self.clock.tick(self.fps)
             self.draw(time_delta)
@@ -63,9 +64,6 @@ class Game:
 
 
 class AnimatedSprite(pygame.sprite.Sprite):
-    AvailableActions = ['idle', 'walking-x', 'walking-down', 'walking-up', 'attack-x',
-                        'attack-up', 'attack-down']
-
     def __init__(self, images_paths, coords, image_dir='assets',
                  size=None, current_action='idle', *groups):
         super().__init__(*groups)
@@ -95,15 +93,12 @@ class AnimatedSprite(pygame.sprite.Sprite):
         self._index = 0
         self.current_action = current_action
         self.coords = coords
-        self.setup_action_sprites()
 
         # self.action_sprites = dict()
-
-    def setup_action_sprites(self):
         self.image = self.action_sprites[self.current_action][self._index]
         self.rect = pygame.Rect(self.coords[0], self.coords[1], *self.image.get_size())
 
-    def start(self, action: AvailableActions = 'idle', speed: float = 1):
+    def start(self, action='idle', speed: float = 1):
         """
         Начинает воспроизводить анимацию
         :param action: действие, по которому будет начат анимация
@@ -147,6 +142,28 @@ class AnimatedSprite(pygame.sprite.Sprite):
             self.image = self.action_sprites[self.current_action][self._index]
 
 
+class PlayerBodyParts(AnimatedSprite):
+    def __init__(self, images_paths, coords, parent):
+        super().__init__(images_paths, coords)
+        self.parent = parent
+
+    def start(self, action='idle', speed: float = 1):
+        """
+        Начинает воспроизводить анимацию
+        :param action: действие, по которому будет начат анимация
+        :param speed: скорость воспроизведения анимации
+        :return:
+        """
+
+        if action != self.current_action and (not self.is_started() or (not (
+            self.current_action in ('walking-up', 'walking-down') and action ==
+            'walking-x') or self.parent.direction_y is None)):
+            self.change_current_action(action)
+            self._started = True
+            self.__speed = speed * 0.1
+            self._index = 0
+
+
 class Player(AnimatedSprite):
     def __init__(self, coords: tuple):
         head_sprite_map: Dict[str, List[str]] = dict()
@@ -160,11 +177,12 @@ class Player(AnimatedSprite):
             body_sprite_map[action_folder] = [f'player/body/{action_folder}/{i}' for i in
                                               os.listdir(f'assets/player/body/{action_folder}')]
 
-        # sprite_map = [head_sprite_map, body_sprite_map]
-        # body_parts_coords = [coords, (coords[0], coords[1] - 25)]
         sprite_map = body_sprite_map
         body_parts_coords = coords
         super().__init__(sprite_map, body_parts_coords)
+
+        self.head_sprite = PlayerBodyParts(head_sprite_map, (coords[0] - 10, coords[1] - 39), self)
+        self.body_sprite = PlayerBodyParts(body_sprite_map, coords, self)
 
         self.walking_right_sprites = self.action_sprites
         self.walking_left_sprites = dict()
@@ -187,25 +205,33 @@ class Player(AnimatedSprite):
         keys = pygame.key.get_pressed()
         if keys[pygame.K_a]:
             self.direction_x = 'left'
-            self.rect.move_ip(-self.speed, 0)
-            self.action_sprites = self.walking_left_sprites
-            self.start(action='walking-x')
+            self.head_sprite.rect.move_ip(-self.speed, 0)
+            self.body_sprite.rect.move_ip(-self.speed, 0)
+            # self.action_sprites = self.walking_left_sprites
+            self.head_sprite.start(action='walking-x')
+            self.body_sprite.start(action='walking-x')
         elif keys[pygame.K_d]:
             self.direction_x = 'right'
-            self.rect.move_ip(self.speed, 0)
-            self.action_sprites = self.walking_right_sprites
-            self.start(action='walking-x')
+            self.head_sprite.rect.move_ip(self.speed, 0)
+            self.body_sprite.rect.move_ip(self.speed, 0)
+            # self.action_sprites = self.walking_right_sprites
+            self.head_sprite.start(action='walking-x')
+            self.body_sprite.start(action='walking-x')
         else:
             self.direction_x = None
 
         if keys[pygame.K_w]:
             self.direction_y = 'up'
-            self.start(action='walking-up')
-            self.rect.move_ip(0, -self.speed)
+            self.head_sprite.start(action='walking-up')
+            self.body_sprite.start(action='walking-up')
+            self.head_sprite.rect.move_ip(0, -self.speed)
+            self.body_sprite.rect.move_ip(0, -self.speed)
         elif keys[pygame.K_s]:
             self.direction_y = 'down'
-            self.start(action='walking-down')
-            self.rect.move_ip(0, self.speed)
+            self.head_sprite.start(action='walking-down')
+            self.body_sprite.start(action='walking-down')
+            self.head_sprite.rect.move_ip(0, self.speed)
+            self.body_sprite.rect.move_ip(0, self.speed)
         else:
             self.direction_y = None
 
@@ -213,25 +239,12 @@ class Player(AnimatedSprite):
         keys = pygame.key.get_pressed()
         if not len(list(filter(lambda x: x, [keys[pygame.K_a], keys[pygame.K_d], keys[pygame.K_s],
                                              keys[pygame.K_w]]))):
-            self.start('idle')
+            self.head_sprite.start('idle')
+            self.body_sprite.start('idle')
 
     def render(self, screen, time_delta: int):
-        screen.blit(self.image, self.rect)
-
-    def start(self, action='idle', speed: float = 1):
-        """
-        Начинает воспроизводить анимацию
-        :param action: действие, по которому будет начат анимация
-        :param speed: скорость воспроизведения анимации
-        :return:
-        """
-        if action != self.current_action and (not self.is_started() or (not (
-            self.current_action in ('walking-up', 'walking-down') and action ==
-            'walking-x') or self.direction_y is None)):
-            self.change_current_action(action)
-            self._started = True
-            self.__speed = speed * 0.1
-            self._index = 0
+        screen.blit(self.body_sprite.image, self.body_sprite.rect)
+        screen.blit(self.head_sprite.image, self.head_sprite.rect)
 
     # def setup_action_sprites(self):
     #     self.action_sprites = dict()
