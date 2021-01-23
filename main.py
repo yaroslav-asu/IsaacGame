@@ -33,7 +33,7 @@ class Game:
         self.wall = Walls()
 
         self.objects = []
-        self.physical_group = [self.rock, self.wall, self.blob, self.player]
+        self.physical_group = [self.player, self.rock, self.wall, self.blob]
         self.groups = []
         self.ammos = SpriteGroup()
 
@@ -193,8 +193,10 @@ class Tears(SpriteObject, PhysicalSprite):
 class EnemyBlob(CutAnimatedSprite, PhysicalSprite):
     player_x: int
     player_y: int
+    can_attack: bool
 
     def __init__(self, coords):
+
         CutAnimatedSprite.__init__(self, 4, 3, *coords, size=1.7, speed=0.008)
         PhysicalSprite.__init__(self)
         self.render_rect = pygame.Rect(*coords, *self.image.get_size())
@@ -204,6 +206,8 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite):
         self.move_delay = 0
         self.is_move = False
         self.tears_list = []
+        self.collision_direction = None
+        self.health = 8
 
     def render(self, screen: pygame.Surface):
         a = pygame.Surface((250, 250))
@@ -215,12 +219,12 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite):
 
     def update(self, game):
         self.move(game)
-        self.change_rect(game)
+        self.frames_handler(game)
         game.ammos.add()
         CutAnimatedSprite.update(self, game)
         PhysicalSprite.update(self, game)
 
-    def change_rect(self, game):
+    def frames_handler(self, game):
         if self.current_frame == 0 or self.current_frame == 8:
             self.rect = pygame.Rect(*self.coords, int(30 * 1.7), int(21 * 1.7)).move(10, 25)
         elif self.current_frame == 1 or self.current_frame == 7:
@@ -251,16 +255,20 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite):
     def move(self, game):
         if self.move_delay > 1 and self.is_move:
             self.player_x, self.player_y = self.get_player_position(game)
-            if self.player_y > self.coords[1] + randint(0, 80):
+            if self.player_y > self.coords[1] + randint(0, 80) and self.collision_direction != \
+                'down':
                 self.coords[1] += self.speed
                 self.render_rect.move_ip(0, self.speed)
-            elif self.player_y < self.coords[1] + randint(0, 80):
+            elif self.player_y < self.coords[1] + randint(0, 80) and self.collision_direction != \
+                'up':
                 self.coords[1] -= self.speed
                 self.render_rect.move_ip(0, -self.speed)
-            if self.player_x + 400 > self.coords[0] + randint(-80, 80):
+            if self.player_x + 400 > self.coords[0] + randint(-80, 80) and \
+                self.collision_direction != 'right':
                 self.coords[0] += self.speed
                 self.render_rect.move_ip(self.speed, 0)
-            elif self.player_x + 400 < self.coords[0] + randint(-80, 80):
+            elif self.player_x + 400 < self.coords[0] + randint(-80, 80) and \
+                self.collision_direction != 'left':
                 self.coords[0] -= self.speed
                 self.render_rect.move_ip(-self.speed, 0)
             self.move_delay = 0
@@ -277,9 +285,32 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite):
                                 [(i, None) for i in ('right', 'left')])
         for direction in tears_directions:
             self.tears_list.append(Tears((int(self.coords[0] + self.rect.width / 2),
-                                         int(self.coords[1] + self.rect.height / 2)),
-                                         *direction,  'enemy',  game))
+                                          int(self.coords[1] + self.rect.height / 2)),
+                                         *direction, 'enemy', game))
         self.can_attack = False
+
+    def on_collision(self, collided_sprite, game):
+        if isinstance(collided_sprite, Tears):
+            return
+        if collided_sprite.rect.left < self.rect.right < collided_sprite.rect.right and \
+            collided_sprite.rect.top < self.rect.bottom and self.rect.top < \
+            collided_sprite.rect.bottom:
+
+            self.collision_direction = 'right'
+        elif collided_sprite.rect.right > self.rect.left > collided_sprite.rect.left and \
+            collided_sprite.rect.top < self.rect.bottom and self.rect.top < \
+            collided_sprite.rect.bottom:
+            self.collision_direction = 'left'
+        if collided_sprite.rect.bottom > self.rect.top > collided_sprite.rect.top and \
+            collided_sprite.rect.left < \
+            self.rect.centerx < collided_sprite.rect.right:
+            self.collision_direction = 'up'
+        elif collided_sprite.rect.top < self.rect.bottom and collided_sprite.rect.left < \
+            self.rect.centerx < collided_sprite.rect.right:
+            self.collision_direction = 'down'
+
+    def absence_collison(self, game):
+        self.collision_direction = None
 
 
 class Player(PhysicalSprite):
@@ -481,7 +512,7 @@ class Player(PhysicalSprite):
             self.rect.centerx < collided_sprite.rect.right:
             self.collision_direction = 'down'
 
-    def calc(self, game):
+    def absence_collision(self, game):
         self.collision_direction = None
 
 
@@ -499,6 +530,7 @@ class Rock(SpriteObject, PhysicalSprite):
     def render(self, screen):
         screen.blit(self.image, self.rect)
 
+
 class Walls(PhysicalSprite):
     def __init__(self):
         PhysicalSprite.__init__(self)
@@ -513,7 +545,6 @@ class Walls(PhysicalSprite):
 
     # def on_collision(self, collided_sprite, game):
     #     print(collided_sprite)
-
 
 
 if __name__ == '__main__':

@@ -67,39 +67,31 @@ class PhysicalSprite(pygame.sprite.Sprite):
     def update(self, game):
         collision = False
         for physical_object in game.get_groups():
-            print(pygame.sprite.spritecollide(self, physical_object, False))
-            if collided := pygame.sprite.spritecollideany(self, physical_object):
-                # обработку столкновений необходимо делать только для объектов, у которых описана физика
+            for collided in list(pygame.sprite.spritecollide(self, physical_object, False)):
                 if not isinstance(collided, PhysicalSprite):
                     continue
                 if collided is not self:
                     collision = True
 
-                    self.current_collided.add(collided)
-                    # noinspection PyTypeChecker
+                    # self.current_collided.add(collided)
                     self.on_collision(collided, game)
-                    print(self)
-        # при столкновении с препятствием обработка физики не происходит
-        # (никто не мешает вам в таком случае сделать отдельный обработчик, описывающий столкновения)
         if not collision:
-            self.calc(game)
+            self.absence_collision(game)
 
-        # для отдельной обработки первого столкновения находим такие объекты
-        # первым столкновениям считаются все столкновения, которые не были совершены на предыдущей
-        # итерации обновления
-        if new_collided := self.current_collided - self.previously_collided:
-            for collided in new_collided:
-                self.on_first_collision(collided, game)
 
-        # подменяем буферы, отвечающие за хранение столкнувшихся объектов
-        self.previously_collided.clear()
-        self.previously_collided.update(self.current_collided)
-        self.current_collided.clear()
+        # if new_collided := self.current_collided - self.previously_collided:
+        #     for collided in new_collided:
+        #         self.on_first_collision(collided, game)
+
+
+        # self.previously_collided.clear()
+        # self.previously_collided.update(self.current_collided)
+        # self.current_collided.clear()
 
     def on_collision(self, collided_sprite, game):
         pass
 
-    def calc(self, game):
+    def absence_collision(self, game):
         pass
 
     def on_first_collision(self, collided_sprite, game):
