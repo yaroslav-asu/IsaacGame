@@ -58,6 +58,29 @@ class SpriteGroup(RenderableObject, pygame.sprite.Group):
         self.draw(screen)
 
 
+class HeartsIncludedCreature:
+    rect: pygame.sprite.Sprite
+    def __init__(self, team):
+        self.team = team
+
+    def update(self, game):
+        hurted = False
+        for physical_object in game.get_groups():
+            for collided in physical_object:
+                try:
+                    if pygame.sprite.collide_mask(self, collided) and collided is not self:
+                        print(collided)
+                        if collided.team != self.team:
+                            self.get_hearted()
+                            print(self, collided)
+                except AttributeError:
+                    pass
+
+    def get_hearted(self):
+        print('get')
+
+
+
 class PhysicalSprite(pygame.sprite.Sprite):
     def __init__(self, *groups):
         super().__init__(*groups)
@@ -78,11 +101,9 @@ class PhysicalSprite(pygame.sprite.Sprite):
         if not collision:
             self.absence_collision(game)
 
-
         # if new_collided := self.current_collided - self.previously_collided:
         #     for collided in new_collided:
         #         self.on_first_collision(collided, game)
-
 
         # self.previously_collided.clear()
         # self.previously_collided.update(self.current_collided)
@@ -231,8 +252,8 @@ class PlayerBodyParts(AnimatedSprite, PhysicalSprite):
         """
 
         if action != self.current_action and (not self.is_started() or (not (
-                self.current_action in ('walking-up', 'walking-down') and action ==
-                'walking-x') or self.parent.direction_y is None)):
+            self.current_action in ('walking-up', 'walking-down') and action ==
+            'walking-x') or self.parent.direction_y is None)):
             self.change_current_action(action)
             self._started = True
             self._index = 0
