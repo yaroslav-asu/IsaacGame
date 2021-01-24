@@ -59,7 +59,6 @@ class SpriteGroup(RenderableObject, pygame.sprite.Group):
 
 
 class HeartsIncludedCreature:
-    rect: pygame.sprite.Sprite
     def __init__(self, team):
         self.team = team
 
@@ -69,16 +68,16 @@ class HeartsIncludedCreature:
             for collided in physical_object:
                 try:
                     if pygame.sprite.collide_mask(self, collided) and collided is not self:
-                        print(collided)
+                        # print(collided)
                         if collided.team != self.team:
                             self.get_hearted()
-                            print(self, collided)
+                            # print(self, collided)
                 except AttributeError:
                     pass
 
     def get_hearted(self):
-        print('get')
-
+        # print('get')
+        pass
 
 
 class PhysicalSprite(pygame.sprite.Sprite):
@@ -90,7 +89,19 @@ class PhysicalSprite(pygame.sprite.Sprite):
     def update(self, game):
         collision = False
         for physical_object in game.get_groups():
-            for collided in list(pygame.sprite.spritecollide(self, physical_object, False)):
+            for obj in physical_object:
+                try:
+                    if pygame.sprite.collide_mask(self, obj) and obj is not self:
+                        collided = obj
+                        # print(self, collided)
+                    else:
+                        continue
+                except AttributeError:
+                    if pygame.sprite.collide_rect(self, obj):
+                        collided = obj
+                        print('fdsa')
+                    else:
+                        continue
                 if not isinstance(collided, PhysicalSprite):
                     continue
                 if collided is not self:

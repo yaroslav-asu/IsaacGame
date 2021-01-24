@@ -31,10 +31,10 @@ class Game:
         self.player = Player((0, 0))
         self.rock = Rock((400, 270))
         self.blob = EnemyBlob((200, 200))
-        self.wall = Walls()
+        # self.wall = Walls()
 
         self.objects = []
-        self.physical_group = [self.player, self.rock, self.wall, self.blob]
+        self.physical_group = [self.player, self.rock, self.blob]
         self.groups = []
         self.ammos = SpriteGroup()
 
@@ -156,7 +156,6 @@ class Tears(SpriteObject, PhysicalSprite):
         elif team == 'enemy':
             self.team_list = [EnemyBlob]
 
-
     def move(self):
         if (abs(self.start_coords[0] - self.coords[0]) > 400
             or abs(self.start_coords[1] - self.coords[1]) > 400):
@@ -173,6 +172,7 @@ class Tears(SpriteObject, PhysicalSprite):
 
     def render(self, screen):
         screen.blit(self.image, self.rect)
+
         if self.is_killed:
             self.kill()
             screen.blit(self.explosion_surface, (self.coords[0] - self.explosion.image.get_width(
@@ -188,11 +188,14 @@ class Tears(SpriteObject, PhysicalSprite):
             super().kill()
 
     def on_collision(self, collided_sprite, game):
-        if not any([isinstance(collided_sprite, team) for team in self.team_list]) and not \
-            isinstance(collided_sprite, Tears):
+        # if not any([isinstance(collided_sprite, team) for team in self.team_list]) and not \
+        #     isinstance(collided_sprite, Tears):
+        #     self.speed_y = 0
+        #     self.speed_x = 0
+        #     self.is_killed = True
+        if isinstance(collided_sprite, EnemyBlob):
             self.speed_y = 0
             self.speed_x = 0
-            self.is_killed = True
 
 
 class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature):
@@ -202,7 +205,8 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature):
 
     def __init__(self, coords):
 
-        CutAnimatedSprite.__init__(self, 4, 3, *coords, size=1.7, speed=0.008)
+        # CutAnimatedSprite.__init__(self, 4, 3, *coords, size=1.7, speed=0.008)
+        CutAnimatedSprite.__init__(self, 4, 3, *coords, size=1.7, speed=0)
         PhysicalSprite.__init__(self)
         HeartsIncludedCreature.__init__(self, 'player')
         self.render_rect = pygame.Rect(*coords, *self.image.get_size())
@@ -216,19 +220,24 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature):
         self.health = 8
         self.hit_box = self.rect
         self.team = 'enemy'
+        self.mask = pygame.mask.from_surface(self.image)
 
     def render(self, screen: pygame.Surface):
         a = pygame.Surface((250, 250))
         a.fill((0, 255, 0))
-        a.blit(self.image, (-20, -30))
+        a.blit(self.image, (10, 25))
         a.set_colorkey((0, 255, 0))
+        olist = self.mask.outline()
+        pygame.draw.lines(a, (200, 150, 150), 1, olist)
         # pygame.draw.rect(screen, (0, 100, 0), self.rect)
         screen.blit(a, self.render_rect)
 
+
     def update(self, game):
-        self.move(game)
-        self.frames_handler(game)
+        # self.move(game)
+        # self.frames_handler(game)
         self.hit_box = self.rect
+        self.mask = pygame.mask.from_surface(self.image)
         HeartsIncludedCreature.update(self, game)
         CutAnimatedSprite.update(self, game)
         PhysicalSprite.update(self, game)
@@ -243,7 +252,7 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature):
             self.rect = pygame.Rect(*self.coords, int(28 * 1.7), int(29 * 1.7)).move(10, 15)
             self.can_attack = True
         elif self.current_frame == 3:
-            self.attack(game)
+            # self.attack(game)
             self.rect = pygame.Rect(*self.coords, int(28 * 1.7), int(29 * 1.7)).move(20, 15)
         elif self.current_frame == 4:
             self.rect = pygame.Rect(*self.coords, int(37 * 1.7), int(20 * 1.7)).move(16, 28)
