@@ -1,3 +1,5 @@
+from typing import Any
+
 import pygame
 import os
 
@@ -9,6 +11,16 @@ def load_image(path, size=None):
     if size is not None:
         image = pygame.transform.scale(image, size)
     return image
+
+
+class CantHurtObject:
+    def __init__(self):
+        self.can_hurt = False
+
+
+class CanHurtObject:
+    def __init__(self):
+        self.can_hurt = True
 
 
 class RenderableObject:
@@ -59,25 +71,47 @@ class SpriteGroup(RenderableObject, pygame.sprite.Group):
 
 
 class HeartsIncludedCreature:
+    image: pygame.image
+    mask: pygame.mask
+    coords: Any
+
     def __init__(self, team):
         self.team = team
+        self.already_hurt_by = set()
+        self.show_hurt_surface = pygame.Surface(self.image.get_size())
+        self.show_hurt_surface.fill((0, 255, 0))
+        self.show_hurt_surface.set_colorkey((0, 255, 0))
 
     def update(self, game):
-        hurted = False
+        hurt = True
+        self.show_hurt_surface.fill((0, 255, 0))
         for physical_object in game.get_groups():
             for collided in physical_object:
                 try:
-                    if pygame.sprite.collide_mask(self, collided) and collided is not self:
-                        # print(collided)
-                        if collided.team != self.team:
-                            self.get_hearted()
-                            # print(self, collided)
-                except AttributeError:
-                    pass
+                    if pygame.sprite.collide_mask(self, collided) and collided is not self and \
+                        collided.can_hurt:
 
-    def get_hearted(self):
-        # print('get')
+                        hurt = True
+                        self.get_hurt(collided, game.screen)
+                    else:
+                        hurt = False
+                except AttributeError:
+                    hurt = False
+
+                if not hurt:
+                    self.absence_hurt()
+
+    def get_hurt(self, hearted_object, screen):
         pass
+
+    def absence_hurt(self):
+        pass
+
+    def show_hurt(self, screen, color=(255, 0, 0), alpha=60):
+        olist = self.mask.outline()
+        self.show_hurt_surface.set_alpha(alpha)
+        pygame.draw.polygon(self.show_hurt_surface, color, olist, 0)
+        screen.blit(self.show_hurt_surface, self.coords)
 
 
 class PhysicalSprite(pygame.sprite.Sprite):
@@ -91,17 +125,16 @@ class PhysicalSprite(pygame.sprite.Sprite):
         for physical_object in game.get_groups():
             for obj in physical_object:
                 try:
-                    if pygame.sprite.collide_mask(self, obj) and obj is not self:
+                    if pygame.sprite.collide_mask(self, obj):
                         collided = obj
-                        # print(self, collided)
                     else:
                         continue
                 except AttributeError:
                     if pygame.sprite.collide_rect(self, obj):
                         collided = obj
-                        print('fdsa')
                     else:
                         continue
+
                 if not isinstance(collided, PhysicalSprite):
                     continue
                 if collided is not self:
@@ -163,7 +196,8 @@ class CutAnimatedSprite(pygame.sprite.Sprite):
 
 class AnimatedSprite(pygame.sprite.Sprite):
     def __init__(self, images_paths, coords,
-                 size=1, current_action='idle', animation_speed: float = 1, *groups):
+                 size=1, current_action='idle', animation_speed: float = 1, color_key=None,
+                 *groups):
         super().__init__(*groups)
 
         self.action_sprites = dict()
@@ -185,9 +219,13 @@ class AnimatedSprite(pygame.sprite.Sprite):
         self._index = 0
         self.current_action = current_action
         self.coords = coords
+        self.color_key = color_key
 
         self.image = self.action_sprites[self.current_action][self._index]
+        if color_key:
+            self.image.set_colorkey(color_key)
         self.rect = pygame.Rect(self.coords[0], self.coords[1], *self.image.get_size())
+        self.mask_rect = self.rect
 
     def start(self, action='idle'):
         """
@@ -233,6 +271,8 @@ class AnimatedSprite(pygame.sprite.Sprite):
 
                 self.__counter = 0
             self.image = self.action_sprites[self.current_action][self._index]
+            if self.color_key:
+                self.image.set_colorkey(self.color_key)
 
     @property
     def index(self):

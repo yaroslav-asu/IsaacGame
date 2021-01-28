@@ -6,7 +6,7 @@ from random import randint
 import pygame
 
 from core import PhysicalSprite, PlayerBodyParts, SpriteGroup, AnimatedSprite, CutAnimatedSprite, \
-    HeartsIncludedCreature
+    HeartsIncludedCreature, CantHurtObject, CanHurtObject
 
 
 def load_image(path, size=None):
@@ -16,6 +16,27 @@ def load_image(path, size=None):
     if size is not None:
         image = pygame.transform.scale(image, size)
     return image
+
+
+def get_rect_from_mask(mask):
+    outline = mask.outline()
+    # width = max(outline, key=lambda x: x[0]) - min(outline, key=lambda x: x[0])
+    # height = max(outline, key=lambda x: x[1]) - min(outline, key=lambda x: x[1])
+    min_x = outline[0][0]
+    min_y = outline[0][1]
+    max_x = 0
+    max_y = 0
+    for i in outline:
+        if i[0] > max_x:
+            max_x = i[0]
+        if i[0] < min_x:
+            min_x = i[0]
+        if i[1] > max_y:
+            max_y = i[1]
+        if i[1] < min_y:
+            min_y = i[1]
+    rect = pygame.Rect(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+    return rect
 
 
 class Game:
@@ -28,13 +49,14 @@ class Game:
         self.clock = pygame.time.Clock()
         self.fps = fps
 
-        self.player = Player((0, 0))
-        self.rock = Rock((400, 270))
-        self.blob = EnemyBlob((200, 200))
-        # self.wall = Walls()
+        self.player = Player((100, 50))
+        self.rock_1 = Rock((400, 270))
+        self.rock_2 = Rock((450, 250))
+        self.blob = EnemyBlob((200, 50))
+        self.wall = Walls()
 
         self.objects = []
-        self.physical_group = [self.player, self.rock, self.blob]
+        self.physical_group = [self.rock_1, self.rock_2, self.blob, self.player, self.wall]
         self.groups = []
         self.ammos = SpriteGroup()
 
@@ -117,7 +139,18 @@ class SpriteObject(pygame.sprite.Sprite):
         self.rect = pygame.Rect(self.coords[0], self.coords[1], *self.image.get_size())
 
 
-class Tears(SpriteObject, PhysicalSprite):
+class Explosion(AnimatedSprite):
+    def __init__(self, coords, size, animation_speed=1):
+        explosion_animation = {'explosion':
+                                   [f'assets/explosions/explosion-1/{file_name}' for file_name in
+                                    os.listdir('assets/explosions/explosion-1')], 'wait': [
+            f'assets/explosions/explosion-1/{os.listdir("assets/explosions/explosion-1")[0]}']}
+
+        AnimatedSprite.__init__(self, explosion_animation, coords, size, 'wait', animation_speed,
+                                (68, 36, 52))
+
+
+class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
     def __init__(self, coords, direction_x, direction_y, team, game, ammo_speed=5):
         SpriteObject.__init__(self, 'assets/player/ammo/ammo-1.png', coords)
         self.coords = coords
@@ -139,15 +172,7 @@ class Tears(SpriteObject, PhysicalSprite):
 
         game.ammos.add(self)
         self.game = game
-        explosion_animation = {'explosion':
-                                   [f'assets/explosions/explosion-1/{file_name}' for file_name in
-                                    os.listdir('assets/explosions/explosion-1')], 'wait': [
-            f'assets/explosions/explosion-1/{os.listdir("assets/explosions/explosion-1")[0]}']}
-
-        self.explosion = AnimatedSprite(explosion_animation, self.coords, 0.3,
-                                        current_action='wait')
-        self.explosion_surface = pygame.Surface(self.explosion.image.get_size())
-        self.explosion_surface.set_colorkey((68, 36, 52))
+        self.explosion = Explosion(self.coords, 0.3)
         self.is_killed = False
         self.hit_box = self.rect
         self.team = team
@@ -175,12 +200,13 @@ class Tears(SpriteObject, PhysicalSprite):
 
         if self.is_killed:
             self.kill()
-            screen.blit(self.explosion_surface, (self.coords[0] - self.explosion.image.get_width(
-            ) / 2 + 15, self.coords[1] - self.explosion.image.get_height() / 2 + 10))
+            screen.blit(self.explosion.image, (self.coords[0] -
+                                               self.explosion.image.get_width(
+                                               ) / 2 + 15, self.coords[
+                                                   1] - self.explosion.image.get_height() / 2 + 10))
 
     def kill(self):
         self.explosion.start('explosion')
-        self.explosion_surface.blit(self.explosion.image, (0, 0))
 
         if self.explosion.index == 4:
             self.image.set_alpha(0)
@@ -188,91 +214,100 @@ class Tears(SpriteObject, PhysicalSprite):
             super().kill()
 
     def on_collision(self, collided_sprite, game):
-        # if not any([isinstance(collided_sprite, team) for team in self.team_list]) and not \
-        #     isinstance(collided_sprite, Tears):
-        #     self.speed_y = 0
-        #     self.speed_x = 0
-        #     self.is_killed = True
-        if isinstance(collided_sprite, EnemyBlob):
+        if not any([isinstance(collided_sprite, team) for team in self.team_list]) and not \
+            isinstance(collided_sprite, Tears):
             self.speed_y = 0
             self.speed_x = 0
+            self.is_killed = True
 
 
-class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature):
+class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature, CantHurtObject):
     player_x: int
     player_y: int
     can_attack: bool
 
     def __init__(self, coords):
-
-        # CutAnimatedSprite.__init__(self, 4, 3, *coords, size=1.7, speed=0.008)
-        CutAnimatedSprite.__init__(self, 4, 3, *coords, size=1.7, speed=0)
+        CutAnimatedSprite.__init__(self, 4, 3, *coords, size=1.7, speed=0.008)
         PhysicalSprite.__init__(self)
-        HeartsIncludedCreature.__init__(self, 'player')
+        CantHurtObject.__init__(self)
+        self.current_frame = 0
         self.render_rect = pygame.Rect(*coords, *self.image.get_size())
-        self.rect = pygame.Rect(*coords, int(30 * 1.7), int(21 * 1.7)).move(10, 25)
+        self.rect = pygame.Rect(*coords, int(30 * 1.7), int(21 * 1.7))
         self.coords = list(coords)
         self.speed = 20
         self.move_delay = 0
-        self.is_move = False
+        self.can_move = False
         self.tears_list = []
-        self.collision_direction = None
+        self.collision_direction_x = None
+        self.collision_direction_y = None
         self.health = 8
-        self.hit_box = self.rect
+        self.is_killed = False
         self.team = 'enemy'
         self.mask = pygame.mask.from_surface(self.image)
+        self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
+        self.explosion = Explosion(self.coords, 0.7)
+        self.is_invisible = False
+        self.is_hurt = False
+        self.animations_delay = 0
+
+        HeartsIncludedCreature.__init__(self, 'enemy')
 
     def render(self, screen: pygame.Surface):
-        a = pygame.Surface((250, 250))
-        a.fill((0, 255, 0))
-        a.blit(self.image, (10, 25))
-        a.set_colorkey((0, 255, 0))
-        olist = self.mask.outline()
-        pygame.draw.lines(a, (200, 150, 150), 1, olist)
-        # pygame.draw.rect(screen, (0, 100, 0), self.rect)
-        screen.blit(a, self.render_rect)
 
+        if not self.is_invisible:
+            screen.blit(self.image, self.render_rect)
+        if self.is_hurt and not self.is_invisible:
+            self.show_hurt(screen)
+        if self.is_killed:
+            screen.blit(self.explosion.image, (self.coords[0] - self.image.get_width() / 3,
+                                               self.coords[1] - 30))
 
     def update(self, game):
         # self.move(game)
         # self.frames_handler(game)
-        self.hit_box = self.rect
+        self.explosion.update(game)
         self.mask = pygame.mask.from_surface(self.image)
+        self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
+        if self.health <= 0:
+            self.is_killed = True
+            self.kill()
+        else:
+            PhysicalSprite.update(self, game)
         HeartsIncludedCreature.update(self, game)
+
         CutAnimatedSprite.update(self, game)
-        PhysicalSprite.update(self, game)
 
 
     def frames_handler(self, game):
         if self.current_frame == 0 or self.current_frame == 8:
-            self.rect = pygame.Rect(*self.coords, int(30 * 1.7), int(21 * 1.7)).move(10, 25)
+            pass
         elif self.current_frame == 1 or self.current_frame == 7:
-            self.rect = pygame.Rect(*self.coords, int(30 * 1.7), int(24 * 1.7)).move(10, 22)
+            pass
         elif self.current_frame == 2:
-            self.rect = pygame.Rect(*self.coords, int(28 * 1.7), int(29 * 1.7)).move(10, 15)
+            pass
             self.can_attack = True
         elif self.current_frame == 3:
-            # self.attack(game)
-            self.rect = pygame.Rect(*self.coords, int(28 * 1.7), int(29 * 1.7)).move(20, 15)
+            self.attack(game)
+            pass
         elif self.current_frame == 4:
-            self.rect = pygame.Rect(*self.coords, int(37 * 1.7), int(20 * 1.7)).move(16, 28)
+            pass
         elif self.current_frame == 5:
-            self.rect = pygame.Rect(*self.coords, int(37 * 1.7), int(20 * 1.7)).move(6, 28)
+            pass
         elif self.current_frame == 6 or self.current_frame == 9:
-            self.rect = pygame.Rect(*self.coords, int(41 * 1.7), int(11 * 1.7)).move(3, 44)
+            pass
         elif self.current_frame == 10:
-            self.is_move = True
-            self.rect = pygame.Rect(*self.coords, int(30 * 1.7), int(29 * 1.7)).move(13, 6)
+            self.can_move = True
+            pass
         elif self.current_frame == 11:
-            self.rect = pygame.Rect(*self.coords, int(30 * 1.7), int(29 * 1.7)).move(13, 8)
-            self.is_move = False
+            pass
+            self.can_move = False
 
     @staticmethod
     def get_player_position(game):
         return game.player.coords
 
     def move(self, game):
-        if self.move_delay > 1 and self.is_move:
+        if self.move_delay > 1 and self.can_move:
             self.player_x, self.player_y = self.get_player_position(game)
             if self.player_y > self.coords[1] + randint(0, 80) and self.collision_direction != \
                 'down':
@@ -311,7 +346,7 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature):
     def on_collision(self, collided_sprite, game):
         if isinstance(collided_sprite, Tears):
             return
-        if collided_sprite.rect.left < self.rect.right < collided_sprite.rect.right and \
+        if collided_sprite.mask_rect.left < self.rect.right < collided_sprite.rect.right and \
             collided_sprite.rect.top < self.rect.bottom and self.rect.top < \
             collided_sprite.rect.bottom:
 
@@ -328,13 +363,37 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature):
             self.rect.centerx < collided_sprite.rect.right:
             self.collision_direction = 'down'
 
-    def absence_collison(self, game):
-        self.collision_direction = None
+    def absence_collision(self, game):
+        self.collision_direction_x = None
+        self.collision_direction_y = None
+
+    def absence_hurt(self):
+        self.is_hurt = False
+
+    def get_hurt(self, hearted_object, screen):
+        if isinstance(hearted_object, Tears) and hearted_object not in self.already_hurt_by and \
+         hearted_object.team == 'player':
+            print(hearted_object)
+            self.is_hurt = True
+            self.health -= 1
+            self.already_hurt_by.add(hearted_object)
+            # olist = self.mask.outline()
+            # pygame.draw.polygon(screen, (200, 150, 150), olist, 0)
+
+    def kill(self):
+        self.explosion.start('explosion')
+        if self.explosion.index == 4:
+            self.is_invisible = True
+        elif self.explosion.index == 7:
+            super().kill()
 
 
-class Player(PhysicalSprite):
+class Player(PhysicalSprite, CantHurtObject):
+    mask: pygame.mask.Mask
+
     def __init__(self, coords: tuple, *groups):
         PhysicalSprite.__init__(self, *groups)
+        CantHurtObject.__init__(self)
 
         head_sprite_map: Dict[str, List[str]] = dict()
         for action_folder in ('idle', 'walking-x', 'walking-down', 'walking-up', 'attack-x',
@@ -367,21 +426,26 @@ class Player(PhysicalSprite):
         self.attack_speed: float = 0.05
         self.attack_delay = 0
 
-        self.image = pygame.Surface((90, 90))
+        self.image = pygame.Surface((self.head_sprite.image.get_width(),
+                                     self.head_sprite.image.get_height() +
+                                     self.body_sprite.image.get_height()))
         self.image.fill((0, 255, 0))
         self.image.set_colorkey((0, 255, 0))
-        self.image.blit(self.body_sprite.image, (10, 39 + self.head_sprite.image.get_height()))
-        self.image.blit(self.head_sprite.image, (0, self.head_sprite.image.get_height()))
+        self.image.blit(self.body_sprite.image, (10, 39))
+        self.image.blit(self.head_sprite.image, (0, 0))
 
         self.render_rect = pygame.Rect(*coords, self.body_sprite.image.get_width(),
                                        self.body_sprite.image.get_height() +
                                        self.head_sprite.image.get_height())
 
-        self.rect = pygame.Rect(coords[0] + 12, coords[1] + self.head_sprite.image.get_height() - 3,
-                                self.body_sprite.image.get_width() - 4,
-                                self.body_sprite.image.get_height() - 8)
-
-        self.collision_direction = None
+        self.rect = pygame.Rect((coords[0], coords[1],
+                                 self.head_sprite.image.get_width(),
+                                 self.head_sprite.image.get_height() +
+                                 self.body_sprite.image.get_height()))
+        self.mask = pygame.mask.from_surface(self.image)
+        self.mask_rect = get_rect_from_mask(self.mask)
+        self.collision_direction_x = None
+        self.collision_direction_y = None
 
         self.is_attack = False
 
@@ -418,7 +482,8 @@ class Player(PhysicalSprite):
             self.body_sprite.start('idle')
 
     def render(self, screen):
-        screen.blit(self.image, self.render_rect)
+        pygame.draw.rect(screen, (0, 100, 0), self.mask_rect)
+        screen.blit(self.image, self.rect)
 
     def update(self, game):
         if self.is_attack:
@@ -444,11 +509,14 @@ class Player(PhysicalSprite):
         if self.direction_x is None and self.direction_y is None:
             self.stop_move()
 
-        self.move(self.direction_x, self.direction_y, self.collision_direction)
+        self.move(self.direction_x, self.direction_y, self.collision_direction_x,
+                  self.collision_direction_y)
         self.body_sprite.update(game)
         self.head_sprite.update(game)
 
-        self.image = pygame.Surface((300, 300))
+        self.image = pygame.Surface((self.head_sprite.image.get_width(),
+                                     self.head_sprite.image.get_height() +
+                                     self.body_sprite.image.get_height()))
         self.image.fill((0, 255, 0))
         self.image.set_colorkey((0, 255, 0))
 
@@ -456,24 +524,28 @@ class Player(PhysicalSprite):
         self.image.blit(self.head_sprite.image, (0, 0))
 
         self.attack(game)
+        self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
         PhysicalSprite.update(self, game)
 
-    def move(self, direction_x, direction_y, collision_direction):
-        if direction_x == 'left' and not collision_direction == 'left':
+    def move(self, direction_x, direction_y, collision_direction_x, collision_direction_y):
+        if direction_x == 'left' and not collision_direction_x == 'left':
             for rect in [self.rect, self.render_rect, self.head_sprite.rect,
-                         self.body_sprite.rect]:
+                         self.body_sprite.rect, self.mask_rect]:
                 rect.move_ip(-self.speed, 0)
             self.coords[0] -= self.speed
-        elif direction_x == 'right' and not collision_direction == 'right':
-            for rect in [self.rect, self.render_rect, self.head_sprite.rect, self.body_sprite.rect]:
+        elif direction_x == 'right' and not collision_direction_x == 'right':
+            for rect in [self.rect, self.render_rect, self.head_sprite.rect,
+                         self.body_sprite.rect, self.mask_rect]:
                 rect.move_ip(self.speed, 0)
             self.coords[0] += self.speed
-        if direction_y == 'up' and not collision_direction == 'up':
-            for rect in [self.rect, self.render_rect, self.head_sprite.rect, self.body_sprite.rect]:
+        if direction_y == 'up' and not collision_direction_y == 'up':
+            for rect in [self.rect, self.render_rect, self.head_sprite.rect,
+                         self.body_sprite.rect, self.mask_rect]:
                 rect.move_ip(0, -self.speed)
             self.coords[1] -= self.speed
-        elif direction_y == 'down' and not collision_direction == 'down':
-            for rect in [self.rect, self.render_rect, self.head_sprite.rect, self.body_sprite.rect]:
+        elif direction_y == 'down' and not collision_direction_y == 'down':
+            for rect in [self.rect, self.render_rect, self.head_sprite.rect,
+                         self.body_sprite.rect, self.mask_rect]:
                 rect.move_ip(0, self.speed)
             self.coords[1] += self.speed
 
@@ -515,33 +587,42 @@ class Player(PhysicalSprite):
     def on_collision(self, collided_sprite, game):
         if isinstance(collided_sprite, Tears):
             return
-        if collided_sprite.rect.left < self.rect.right < collided_sprite.rect.right and \
-            collided_sprite.rect.top < self.rect.bottom and self.rect.top < \
-            collided_sprite.rect.bottom:
-            self.collision_direction = 'right'
-        elif collided_sprite.rect.right > self.rect.left > collided_sprite.rect.left and \
-            collided_sprite.rect.top < self.rect.bottom and self.rect.top < \
-            collided_sprite.rect.bottom:
-            self.collision_direction = 'left'
-        if collided_sprite.rect.bottom > self.rect.top > collided_sprite.rect.top and \
-            collided_sprite.rect.left < \
-            self.rect.centerx < collided_sprite.rect.right:
-            self.collision_direction = 'up'
-        elif collided_sprite.rect.top < self.rect.bottom and collided_sprite.rect.left < \
-            self.rect.centerx < collided_sprite.rect.right:
-            self.collision_direction = 'down'
+        # print(self.mask.overlap(collided_sprite.mask, (self.)))
+        if collided_sprite.mask_rect.left < self.mask_rect.right < collided_sprite.mask_rect.right \
+            and \
+            collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
+            collided_sprite.mask_rect.bottom:
+
+            self.collision_direction_x = 'right'
+            print('right')
+
+        elif collided_sprite.mask_rect.right > self.mask_rect.left > collided_sprite.mask_rect.left and \
+            collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
+            collided_sprite.mask_rect.bottom:
+            self.collision_direction_x = 'left'
+            print('left')
+        if collided_sprite.mask_rect.bottom > self.mask_rect.top > collided_sprite.mask_rect.top and \
+            collided_sprite.mask_rect.left < \
+            self.mask_rect.centerx < collided_sprite.mask_rect.right:
+            self.collision_direction_y = 'up'
+            print('up')
+        elif collided_sprite.mask_rect.top < self.mask_rect.bottom and collided_sprite.mask_rect.left < \
+            self.mask_rect.centerx < collided_sprite.mask_rect.right:
+            self.collision_direction_y = 'down'
+            print('down')
 
     def absence_collision(self, game):
-        self.collision_direction = None
+        self.collision_direction_x, self.collision_direction_y = None, None
 
 
-class Rock(SpriteObject, PhysicalSprite):
+class Rock(SpriteObject, PhysicalSprite, CantHurtObject):
     def __init__(self, coords, *groups):
         PhysicalSprite.__init__(self, *groups)
         SpriteObject.__init__(self, image_path='assets/room/room_rock.png',
                               coords=coords)
+        CantHurtObject.__init__(self)
         self.coords = coords
-
+        self.mask_rect = self.rect
     def update(self, game):
         SpriteObject.update(self, game)
         PhysicalSprite.update(self, game)
@@ -550,10 +631,12 @@ class Rock(SpriteObject, PhysicalSprite):
         screen.blit(self.image, self.rect)
 
 
-class Walls(PhysicalSprite):
+class Walls(PhysicalSprite, CantHurtObject):
     def __init__(self):
         PhysicalSprite.__init__(self)
+        CantHurtObject.__init__(self)
         self.rect = pygame.Rect(0, 0, 1000, 85)
+        self.mask_rect = self.rect
 
     def update(self, game):
         PhysicalSprite.update(self, game)
