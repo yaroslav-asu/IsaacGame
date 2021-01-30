@@ -74,6 +74,8 @@ class HeartsIncludedCreature:
     image: pygame.image
     mask: pygame.mask
     coords: Any
+    health: int
+    hurt_delay: float
 
     def __init__(self, team):
         self.team = team
@@ -81,18 +83,17 @@ class HeartsIncludedCreature:
         self.show_hurt_surface = pygame.Surface(self.image.get_size())
         self.show_hurt_surface.fill((0, 255, 0))
         self.show_hurt_surface.set_colorkey((0, 255, 0))
+        self.is_hurt = False
+        self.hurt_delay = 0
 
     def update(self, game):
-        hurt = True
         self.show_hurt_surface.fill((0, 255, 0))
         for physical_object in game.get_groups():
             for collided in physical_object:
                 try:
-                    if pygame.sprite.collide_mask(self, collided) and collided is not self and \
-                        collided.can_hurt:
-
+                    if pygame.sprite.collide_mask(self, collided) and collided is not self:
                         hurt = True
-                        self.get_hurt(collided, game.screen)
+                        self.get_hurt(collided)
                     else:
                         hurt = False
                 except AttributeError:
@@ -101,8 +102,11 @@ class HeartsIncludedCreature:
                 if not hurt:
                     self.absence_hurt()
 
-    def get_hurt(self, hearted_object, screen):
-        pass
+    def get_hurt(self, hearted_object):
+        self.is_hurt = True
+        self.health -= hearted_object.damage
+        self.already_hurt_by.add(hearted_object)
+        self.hurt_delay = 0
 
     def absence_hurt(self):
         pass
@@ -117,6 +121,7 @@ class HeartsIncludedCreature:
 class PhysicalSprite(pygame.sprite.Sprite):
     def __init__(self, *groups):
         super().__init__(*groups)
+        self.mask_rect = pygame.Rect
         self.previously_collided = set()
         self.current_collided = set()
 
@@ -139,22 +144,32 @@ class PhysicalSprite(pygame.sprite.Sprite):
                     continue
                 if collided is not self:
                     collision = True
-
-                    # self.current_collided.add(collided)
                     self.on_collision(collided, game)
         if not collision:
             self.absence_collision(game)
 
-        # if new_collided := self.current_collided - self.previously_collided:
-        #     for collided in new_collided:
-        #         self.on_first_collision(collided, game)
-
-        # self.previously_collided.clear()
-        # self.previously_collided.update(self.current_collided)
-        # self.current_collided.clear()
-
     def on_collision(self, collided_sprite, game):
-        pass
+        if collided_sprite.mask_rect.left <= self.mask_rect.right < \
+            collided_sprite.mask_rect.right \
+            and not self.mask_rect.left > collided_sprite.mask_rect.left and \
+            collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
+            collided_sprite.mask_rect.bottom:
+            self.collision_direction_x = 'right'
+
+        elif collided_sprite.mask_rect.right > self.mask_rect.left > collided_sprite.mask_rect.left and \
+            not self.mask_rect.right < collided_sprite.mask_rect.right and \
+            collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
+            collided_sprite.mask_rect.bottom:
+            self.collision_direction_x = 'left'
+
+        if collided_sprite.mask_rect.bottom > self.mask_rect.top > collided_sprite.mask_rect.top and \
+            collided_sprite.mask_rect.left < self.mask_rect.right and \
+            collided_sprite.mask_rect.right > self.mask_rect.left:
+            self.collision_direction_y = 'up'
+
+        elif collided_sprite.mask_rect.top < self.mask_rect.bottom and collided_sprite.mask_rect.left < \
+            self.mask_rect.centerx < collided_sprite.mask_rect.right:
+            self.collision_direction_y = 'down'
 
     def absence_collision(self, game):
         pass
@@ -164,11 +179,11 @@ class PhysicalSprite(pygame.sprite.Sprite):
 
 
 class CutAnimatedSprite(pygame.sprite.Sprite):
-    def __init__(self, columns, rows, x, y, size: float = 1, speed: float = 1):
+    def __init__(self, path, columns, rows, x, y, size: float = 1, speed: float = 1):
         super().__init__()
         self.frames = []
-        size_tuple = tuple(int(i * size) for i in load_image('assets/enemys/i-blob.png').get_size())
-        sheet = load_image('assets/enemys/i-blob.png', size_tuple)
+        size_tuple = tuple(int(i * size) for i in load_image(path).get_size())
+        sheet = load_image(path, size_tuple)
         self.cut_sheet(sheet, columns, rows)
         self.current_frame = 0
         self.image = self.frames[self.current_frame]
@@ -262,13 +277,10 @@ class AnimatedSprite(pygame.sprite.Sprite):
         Простенький вариант для работы анимации
         """
         if self.is_started():
-            # увеличиваем счётчик на каждой итерации на некотое небольшое значение
             self.__counter += self.__counter + 1 * self.animation_speed
 
             if self.__counter >= 1:
                 self._index = (self._index + 1) % len(self.action_sprites[self.current_action])
-                # если счётчик дошёл до отмечки, то выставляем следующее в списке изображение на отрисовку
-
                 self.__counter = 0
             self.image = self.action_sprites[self.current_action][self._index]
             if self.color_key:
@@ -310,7 +322,6 @@ class PlayerBodyParts(AnimatedSprite, PhysicalSprite):
             self._index = 0
 
     def update(self, game):
-        # PhysicalSprite.update(self, game)
         AnimatedSprite.update(self, game)
 
     def calc(self, game):

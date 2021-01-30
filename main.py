@@ -1,3 +1,4 @@
+import math
 import os
 from collections import defaultdict
 from itertools import combinations
@@ -52,11 +53,18 @@ class Game:
         self.player = Player((100, 50))
         self.rock_1 = Rock((400, 270))
         self.rock_2 = Rock((450, 250))
-        self.blob = EnemyBlob((200, 50))
+        self.blob_1 = EnemyBlob((200, 100))
+        self.blob_2 = EnemyBlob((100, 200))
+        self.blob_3 = EnemyBlob((300, 400))
+        self.mosquito = EnemyMosquito((200, 200))
+
         self.wall = Walls()
 
+        self.interface = SpriteGroup(HealthBar(self))
         self.objects = []
-        self.physical_group = [self.rock_1, self.rock_2, self.blob, self.player, self.wall]
+        self.physical_group = [self.rock_1, self.rock_2, self.blob_1, self.blob_2,
+                               self.player,
+                               self.wall, self.mosquito]
         self.groups = []
         self.ammos = SpriteGroup()
 
@@ -70,7 +78,7 @@ class Game:
         for obj in self.physical_group:
             physical_group.add(obj)
 
-        for obj in [physical_group, self.ammos]:
+        for obj in [physical_group, self.ammos, self.interface]:
             self.add_object(obj)
 
     def add_object(self, obj):
@@ -151,7 +159,8 @@ class Explosion(AnimatedSprite):
 
 
 class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
-    def __init__(self, coords, direction_x, direction_y, team, game, ammo_speed=5):
+    def __init__(self, coords, team, game, direction_x=None, direction_y=None, ammo_speed=5,
+                 dx=None, dy=None):
         SpriteObject.__init__(self, 'assets/player/ammo/ammo-1.png', coords)
         self.coords = coords
         self.start_coords = coords
@@ -168,6 +177,10 @@ class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
             self.speed_y = ammo_speed
         else:
             self.speed_y = 0
+        if dx or dy:
+            self.speed_y = dy * ammo_speed * -1
+            self.speed_x = dx * ammo_speed * -1
+
         self.transparent_num = 255
 
         game.ammos.add(self)
@@ -181,13 +194,15 @@ class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
         elif team == 'enemy':
             self.team_list = [EnemyBlob]
 
+        self.damage = 1
+
     def move(self):
         if (abs(self.start_coords[0] - self.coords[0]) > 400
             or abs(self.start_coords[1] - self.coords[1]) > 400):
             self.is_killed = True
 
         self.rect.move_ip(self.speed_x, self.speed_y)
-        self.coords = self.coords[0] + self.speed_x, self.coords[1] + self.speed_y
+        self.coords = self.rect.x, self.rect.y
 
     def update(self, game):
         PhysicalSprite.update(self, game)
@@ -207,7 +222,6 @@ class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
 
     def kill(self):
         self.explosion.start('explosion')
-
         if self.explosion.index == 4:
             self.image.set_alpha(0)
         elif self.explosion.index == 7:
@@ -221,16 +235,47 @@ class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
             self.is_killed = True
 
 
+class HealthBar:
+    def __init__(self, game):
+        self.game = game
+        self.player_health = game.player.health
+        self.health_surface = pygame.Surface((200, 50))
+        self.health_surface.fill((30, 30, 30))
+        self.health_surface.set_colorkey((30, 30, 30))
+        self.rect = self.health_surface.get_rect()
+        self.full_heart = load_image('assets/room/full_heart.png', (40, 40))
+        self.half_heart = load_image('assets/room/half_heart.png', (40, 40))
+
+    def render(self, screen):
+        screen.blit(self.health_surface, self.rect)
+
+    def update(self, game):
+        self.player_health = game.player.health
+        self.health_surface.fill((30, 30, 30))
+        health = self.player_health
+        for i in range(math.ceil(self.player_health / 2)):
+            x = 40 * i
+            rect = pygame.Rect(x, 0, 40, 40)
+            if health >= 2:
+                self.health_surface.blit(self.full_heart, rect)
+            else:
+                self.health_surface.blit(self.half_heart, rect)
+            health -= 2
+
+    def add_internal(self, arg):
+        pass
+
+
 class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature, CantHurtObject):
     player_x: int
     player_y: int
     can_attack: bool
 
     def __init__(self, coords):
-        CutAnimatedSprite.__init__(self, 4, 3, *coords, size=1.7, speed=0.008)
+        CutAnimatedSprite.__init__(self,'assets/enemys/i-blob.png', 4, 3, *coords, size=1.7,
+                                   speed=0.0008)
         PhysicalSprite.__init__(self)
         CantHurtObject.__init__(self)
-        self.current_frame = 0
         self.render_rect = pygame.Rect(*coords, *self.image.get_size())
         self.rect = pygame.Rect(*coords, int(30 * 1.7), int(21 * 1.7))
         self.coords = list(coords)
@@ -247,13 +292,14 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature, CantH
         self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
         self.explosion = Explosion(self.coords, 0.7)
         self.is_invisible = False
-        self.is_hurt = False
-        self.animations_delay = 0
+        self.move_delay = 0
+        self.__counter = 0
+        self.wait_counter = 0
+        self.is_wait = False
 
         HeartsIncludedCreature.__init__(self, 'enemy')
 
     def render(self, screen: pygame.Surface):
-
         if not self.is_invisible:
             screen.blit(self.image, self.render_rect)
         if self.is_hurt and not self.is_invisible:
@@ -263,44 +309,40 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature, CantH
                                                self.coords[1] - 30))
 
     def update(self, game):
-        # self.move(game)
-        # self.frames_handler(game)
+
+        if self.wait_counter < 5:
+            self.wait()
+        else:
+            CutAnimatedSprite.update(self, game)
+            self.move(game)
+        self.frames_handler(game)
         self.explosion.update(game)
         self.mask = pygame.mask.from_surface(self.image)
         self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
+        if self.hurt_delay >= 1:
+            self.is_hurt = False
+        self.hurt_delay += self.hurt_delay / 3 + 0.01
+
         if self.health <= 0:
             self.is_killed = True
             self.kill()
         else:
             PhysicalSprite.update(self, game)
         HeartsIncludedCreature.update(self, game)
-
-        CutAnimatedSprite.update(self, game)
-
+        if self.move_delay >= 1:
+            pass
 
     def frames_handler(self, game):
-        if self.current_frame == 0 or self.current_frame == 8:
-            pass
-        elif self.current_frame == 1 or self.current_frame == 7:
-            pass
-        elif self.current_frame == 2:
-            pass
+        if self.current_frame == 2:
             self.can_attack = True
         elif self.current_frame == 3:
             self.attack(game)
             pass
-        elif self.current_frame == 4:
-            pass
-        elif self.current_frame == 5:
-            pass
-        elif self.current_frame == 6 or self.current_frame == 9:
-            pass
         elif self.current_frame == 10:
             self.can_move = True
-            pass
         elif self.current_frame == 11:
-            pass
             self.can_move = False
+            self.wait_counter = 0
 
     @staticmethod
     def get_player_position(game):
@@ -309,76 +351,57 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature, CantH
     def move(self, game):
         if self.move_delay > 1 and self.can_move:
             self.player_x, self.player_y = self.get_player_position(game)
-            if self.player_y > self.coords[1] + randint(0, 80) and self.collision_direction != \
+            if self.player_y > self.coords[1] + randint(0, 80) and self.collision_direction_y \
+                != \
                 'down':
                 self.coords[1] += self.speed
-                self.render_rect.move_ip(0, self.speed)
-            elif self.player_y < self.coords[1] + randint(0, 80) and self.collision_direction != \
+                for rect in [self.render_rect, self.rect]:
+                    rect.move_ip(0, self.speed)
+            elif self.player_y < self.coords[1] + randint(0, 80) and self.collision_direction_y != \
                 'up':
                 self.coords[1] -= self.speed
-                self.render_rect.move_ip(0, -self.speed)
-            if self.player_x + 400 > self.coords[0] + randint(-80, 80) and \
-                self.collision_direction != 'right':
+                for rect in [self.render_rect, self.rect]:
+                    rect.move_ip(0, -self.speed)
+            if self.player_x - 400 > self.coords[0] + randint(-80, 80) < self.player_x + 400 and \
+                self.collision_direction_x != 'right':
                 self.coords[0] += self.speed
-                self.render_rect.move_ip(self.speed, 0)
-            elif self.player_x + 400 < self.coords[0] + randint(-80, 80) and \
-                self.collision_direction != 'left':
+                for rect in [self.render_rect, self.rect]:
+                    rect.move_ip(self.speed, 0)
+            elif self.collision_direction_x != 'left':
                 self.coords[0] -= self.speed
-                self.render_rect.move_ip(-self.speed, 0)
+                for rect in [self.render_rect, self.rect]:
+                    rect.move_ip(-self.speed, 0)
             self.move_delay = 0
         self.move_delay += self.move_delay + 0.01
 
     def attack(self, game):
         if not self.can_attack:
             return
-        tears_directions = []
-        [tears_directions.extend(list(combinations([j, i], 2))) for i in ('up', 'down') for j
-         in ('left', 'right')]
-        tears_directions = list(set(tears_directions))
-        tears_directions.extend([(None, i) for i in ('up', 'down')] +
-                                [(i, None) for i in ('right', 'left')])
-        for direction in tears_directions:
-            self.tears_list.append(Tears((int(self.coords[0] + self.rect.width / 2),
-                                          int(self.coords[1] + self.rect.height / 2)),
-                                         *direction, 'enemy', game))
+        dx = self.rect.x - game.player.mask_rect.x
+        dy = self.rect.y - game.player.mask_rect.y
+
+        dist = math.hypot(dx, dy)
+        dx = dx / dist
+        dy = dy / dist
+
+        self.tears_list.append(Tears((int(self.coords[0] + self.rect.width / 2 + 20),
+                                      int(self.coords[1] + self.rect.height / 2 + 45)),
+                                     team='enemy', game=game, dx=dx, dy=dy, ammo_speed=8))
         self.can_attack = False
 
     def on_collision(self, collided_sprite, game):
         if isinstance(collided_sprite, Tears):
             return
-        if collided_sprite.mask_rect.left < self.rect.right < collided_sprite.rect.right and \
-            collided_sprite.rect.top < self.rect.bottom and self.rect.top < \
-            collided_sprite.rect.bottom:
-
-            self.collision_direction = 'right'
-        elif collided_sprite.rect.right > self.rect.left > collided_sprite.rect.left and \
-            collided_sprite.rect.top < self.rect.bottom and self.rect.top < \
-            collided_sprite.rect.bottom:
-            self.collision_direction = 'left'
-        if collided_sprite.rect.bottom > self.rect.top > collided_sprite.rect.top and \
-            collided_sprite.rect.left < \
-            self.rect.centerx < collided_sprite.rect.right:
-            self.collision_direction = 'up'
-        elif collided_sprite.rect.top < self.rect.bottom and collided_sprite.rect.left < \
-            self.rect.centerx < collided_sprite.rect.right:
-            self.collision_direction = 'down'
+        PhysicalSprite.on_collision(self, collided_sprite, game)
 
     def absence_collision(self, game):
         self.collision_direction_x = None
         self.collision_direction_y = None
 
-    def absence_hurt(self):
-        self.is_hurt = False
-
-    def get_hurt(self, hearted_object, screen):
+    def get_hurt(self, hearted_object):
         if isinstance(hearted_object, Tears) and hearted_object not in self.already_hurt_by and \
-         hearted_object.team == 'player':
-            print(hearted_object)
-            self.is_hurt = True
-            self.health -= 1
-            self.already_hurt_by.add(hearted_object)
-            # olist = self.mask.outline()
-            # pygame.draw.polygon(screen, (200, 150, 150), olist, 0)
+            hearted_object.team == 'player':
+            HeartsIncludedCreature.get_hurt(self, hearted_object)
 
     def kill(self):
         self.explosion.start('explosion')
@@ -387,8 +410,20 @@ class EnemyBlob(CutAnimatedSprite, PhysicalSprite, HeartsIncludedCreature, CantH
         elif self.explosion.index == 7:
             super().kill()
 
+    def wait(self):
+        self.is_wait = True
+        self.__counter += self.__counter / 3 + self.animation_speed
+        if self.__counter >= 1:
+            self.wait_counter += 1
+            if self.current_frame == 0:
+                self.current_frame = 1
+            else:
+                self.current_frame = 0
+            self.image = self.frames[self.current_frame]
+            self.__counter = 0
 
-class Player(PhysicalSprite, CantHurtObject):
+
+class Player(PhysicalSprite, CantHurtObject, HeartsIncludedCreature):
     mask: pygame.mask.Mask
 
     def __init__(self, coords: tuple, *groups):
@@ -449,6 +484,9 @@ class Player(PhysicalSprite, CantHurtObject):
 
         self.is_attack = False
 
+        self.health = 6
+        HeartsIncludedCreature.__init__(self, 'player')
+
     def key_press_handler(self, event):
         if event.key == pygame.K_a:
             self.direction_x = 'left'
@@ -482,14 +520,19 @@ class Player(PhysicalSprite, CantHurtObject):
             self.body_sprite.start('idle')
 
     def render(self, screen):
-        pygame.draw.rect(screen, (0, 100, 0), self.mask_rect)
         screen.blit(self.image, self.rect)
+        if self.is_hurt:
+            self.show_hurt(screen)
 
     def update(self, game):
         if self.is_attack:
             update_body_parts = (self.body_sprite,)
         else:
             update_body_parts = (self.head_sprite, self.body_sprite)
+
+        if self.hurt_delay >= 1:
+            self.is_hurt = False
+        self.hurt_delay += self.hurt_delay / 3 + 0.01
 
         if self.direction_x == 'left':
             for element in update_body_parts:
@@ -526,6 +569,7 @@ class Player(PhysicalSprite, CantHurtObject):
         self.attack(game)
         self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
         PhysicalSprite.update(self, game)
+        HeartsIncludedCreature.update(self, game)
 
     def move(self, direction_x, direction_y, collision_direction_x, collision_direction_y):
         if direction_x == 'left' and not collision_direction_x == 'left':
@@ -558,27 +602,27 @@ class Player(PhysicalSprite, CantHurtObject):
         if keys[pygame.K_LEFT]:
             self.head_sprite.action_sprites = self.head_sprite.left_sprites
             self.head_sprite.start(action='attack-x')
-            self.ammos_list.append(Tears(self.head_sprite.rect.center, 'left',
-                                         self.direction_y, team, game))
+            self.ammos_list.append(Tears(self.head_sprite.rect.center, team, game, 'left',
+                                         self.direction_y))
             self.attack_delay = 0
             self.is_attack = True
         elif keys[pygame.K_RIGHT]:
             self.head_sprite.action_sprites = self.head_sprite.right_sprites
             self.head_sprite.start(action='attack-x')
-            self.ammos_list.append(Tears(self.head_sprite.rect.center, 'right',
-                                         self.direction_y, team, game))
+            self.ammos_list.append(Tears(self.head_sprite.rect.center, team, game, 'right',
+                                         self.direction_y))
             self.attack_delay = 0
             self.is_attack = True
         elif keys[pygame.K_UP]:
             self.head_sprite.start(action='attack-up')
-            self.ammos_list.append(Tears(self.head_sprite.rect.center, self.direction_x,
-                                         'up', team, game))
+            self.ammos_list.append(Tears(self.head_sprite.rect.center, team, game, self.direction_x,
+                                         'up'))
             self.attack_delay = 0
             self.is_attack = True
         elif keys[pygame.K_DOWN]:
             self.head_sprite.start(action='attack-down')
-            self.ammos_list.append(Tears(self.head_sprite.rect.center, self.direction_x,
-                                         'down', team, game))
+            self.ammos_list.append(Tears(self.head_sprite.rect.center, team, game, self.direction_x,
+                                         'down'))
             self.attack_delay = 0
             self.is_attack = True
         else:
@@ -587,32 +631,50 @@ class Player(PhysicalSprite, CantHurtObject):
     def on_collision(self, collided_sprite, game):
         if isinstance(collided_sprite, Tears):
             return
-        # print(self.mask.overlap(collided_sprite.mask, (self.)))
-        if collided_sprite.mask_rect.left < self.mask_rect.right < collided_sprite.mask_rect.right \
-            and \
-            collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
-            collided_sprite.mask_rect.bottom:
-
-            self.collision_direction_x = 'right'
-            print('right')
-
-        elif collided_sprite.mask_rect.right > self.mask_rect.left > collided_sprite.mask_rect.left and \
-            collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
-            collided_sprite.mask_rect.bottom:
-            self.collision_direction_x = 'left'
-            print('left')
-        if collided_sprite.mask_rect.bottom > self.mask_rect.top > collided_sprite.mask_rect.top and \
-            collided_sprite.mask_rect.left < \
-            self.mask_rect.centerx < collided_sprite.mask_rect.right:
-            self.collision_direction_y = 'up'
-            print('up')
-        elif collided_sprite.mask_rect.top < self.mask_rect.bottom and collided_sprite.mask_rect.left < \
-            self.mask_rect.centerx < collided_sprite.mask_rect.right:
-            self.collision_direction_y = 'down'
-            print('down')
+        PhysicalSprite.on_collision(self, collided_sprite, game)
 
     def absence_collision(self, game):
         self.collision_direction_x, self.collision_direction_y = None, None
+
+    def get_hurt(self, hearted_object):
+        if isinstance(hearted_object, Tears) and hearted_object not in self.already_hurt_by and \
+            hearted_object.team == 'enemy':
+            HeartsIncludedCreature.get_hurt(self, hearted_object)
+
+
+class EnemyMosquito(PhysicalSprite, CanHurtObject, HeartsIncludedCreature, CutAnimatedSprite):
+    def __init__(self, coords):
+        PhysicalSprite.__init__(self)
+        CanHurtObject.__init__(self)
+
+        CutAnimatedSprite.__init__(self, 'assets/enemys/mosquito.png', 2, 1, *coords, size=3,
+                                   speed=0.01)
+        self.coords = coords
+        HeartsIncludedCreature.__init__(self, 'enemy')
+        self.mask = pygame.mask.from_surface(self.image)
+        self.mask_rect = self.rect
+
+    def render(self, screen):
+        screen.blit(self.image, self.rect)
+        if self.is_hurt:
+            self.show_hurt(screen)
+
+    def update(self, game):
+        CutAnimatedSprite.update(self, game)
+        HeartsIncludedCreature.update(self, game)
+        if self.hurt_delay >= 1:
+            self.is_hurt = False
+        self.hurt_delay += self.hurt_delay / 3 + 0.01
+
+    def on_collision(self, collided_sprite, game):
+        if isinstance(collided_sprite, Tears) or isinstance(collided_sprite, Player):
+            return
+        PhysicalSprite.on_collision(self, collided_sprite, game)
+
+    def get_hurt(self, hearted_object):
+        if isinstance(hearted_object, Tears) and hearted_object not in self.already_hurt_by and \
+            hearted_object.team == 'player':
+            HeartsIncludedCreature.get_hurt(self, hearted_object)
 
 
 class Rock(SpriteObject, PhysicalSprite, CantHurtObject):
@@ -623,12 +685,16 @@ class Rock(SpriteObject, PhysicalSprite, CantHurtObject):
         CantHurtObject.__init__(self)
         self.coords = coords
         self.mask_rect = self.rect
+
     def update(self, game):
         SpriteObject.update(self, game)
         PhysicalSprite.update(self, game)
 
     def render(self, screen):
         screen.blit(self.image, self.rect)
+
+    def on_collision(self, collided_sprite, game):
+        pass
 
 
 class Walls(PhysicalSprite, CantHurtObject):
@@ -643,6 +709,9 @@ class Walls(PhysicalSprite, CantHurtObject):
 
     def render(self, screen):
         # pygame.draw.rect(screen, (0, 100, 0), self.rect)
+        pass
+
+    def on_collision(self, collided_sprite, game):
         pass
 
     # def on_collision(self, collided_sprite, game):
