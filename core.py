@@ -1,5 +1,5 @@
-from typing import Any
-
+from collections import defaultdict
+from typing import Tuple, Any
 import pygame
 import os
 
@@ -11,6 +11,117 @@ def load_image(path, size=None):
     if size is not None:
         image = pygame.transform.scale(image, size)
     return image
+
+
+def get_rect_from_mask(mask):
+    outline = mask.outline()
+    # width = max(outline, key=lambda x: x[0]) - min(outline, key=lambda x: x[0])
+    # height = max(outline, key=lambda x: x[1]) - min(outline, key=lambda x: x[1])
+    min_x = outline[0][0]
+    min_y = outline[0][1]
+    max_x = 0
+    max_y = 0
+    for i in outline:
+        if i[0] > max_x:
+            max_x = i[0]
+        if i[0] < min_x:
+            min_x = i[0]
+        if i[1] > max_y:
+            max_y = i[1]
+        if i[1] < min_y:
+            min_y = i[1]
+    rect = pygame.Rect(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+    return rect
+
+
+class Game:
+
+    def __init__(self, width: int = 959, height: int = 540, name: str = 'Esaac', fps: int = 60):
+        from creatures import Player, EnemyBlob, EnemyMosquito
+        from objects import Rock, Walls
+        from uis import HealthBar
+        pygame.init()
+        pygame.display.set_caption(name)
+
+        self.screen = pygame.display.set_mode((width, height))
+        self.running = True
+        self.clock = pygame.time.Clock()
+        self.fps = fps
+
+        self.player = Player((100, 50))
+        self.rock_1 = Rock((400, 270))
+        self.rock_2 = Rock((450, 250))
+        # self.blob_1 = EnemyBlob((200, 100))
+        self.blob_2 = EnemyBlob((100, 200))
+        # self.blob_3 = EnemyBlob((300, 400))
+        self.mosquito = EnemyMosquito((200, 200), 'big')
+
+        self.wall = Walls()
+
+        self.interface = SpriteGroup(HealthBar(self))
+        self.objects = []
+        self.physical_group = [self.rock_1, self.rock_2, self.wall]
+        self.creatures = SpriteGroup(self.mosquito, self.player)
+        self.groups = []
+        self.ammos = SpriteGroup()
+
+        self.background = load_image('assets/room/room-background.png')
+        self._handlers = defaultdict(list)
+
+        self.add_handler(pygame.KEYDOWN, self.player.key_press_handler)
+        self.add_handler(pygame.KEYUP, self.player.stop_move)
+
+        physical_group = SpriteGroup()
+        for obj in self.physical_group:
+            physical_group.add(obj)
+
+        for obj in [physical_group, self.ammos, self.interface, self.creatures]:
+            self.add_object(obj)
+
+    def add_object(self, obj):
+        """
+        Добавляет объект для отрисовки на экран.
+
+        Должен быть экземпляром класса или наследника класса RenderableObject
+        :param obj: созданный объект для отрисовки
+        """
+        self.objects.append(obj)
+        if isinstance(obj, SpriteGroup):
+            self.groups.append(obj)
+
+    def run(self):
+        while self.running:
+            self.screen.blit(self.background, (0, 0))
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                for handler in self._handlers.get(event.type, []):
+                    handler(event)
+            self.update()
+
+            self.draw()
+
+            pygame.display.flip()
+            self.clock.tick(self.fps)
+        pygame.quit()
+
+    def draw(self):
+        for obj in self.objects:
+            if isinstance(obj, SpriteGroup):
+                for i in obj:
+                    i.render(self.screen)
+            else:
+                obj.render(self.screen)
+
+    def add_handler(self, event_type, handler):
+        self._handlers[event_type].append(handler)
+
+    def update(self):
+        for obj in self.objects:
+            obj.update(self)
+
+    def get_groups(self):
+        return self.groups
 
 
 class CantHurtObject:
@@ -70,55 +181,30 @@ class SpriteGroup(RenderableObject, pygame.sprite.Group):
         self.draw(screen)
 
 
-class HeartsIncludedCreature:
-    image: pygame.image
-    mask: pygame.mask
-    coords: Any
-    health: int
-    hurt_delay: float
+class SpriteObject(pygame.sprite.Sprite):
+    """
+    Класс для работы со спрайтом. Любой спрайт ассоциируются с некоторым изображением,
+    поэтому для урпощения жизни были добавлены параметры для создания изображения вместе с спрайтом
+    """
 
-    def __init__(self, team):
-        self.team = team
-        self.already_hurt_by = set()
-        self.show_hurt_surface = pygame.Surface(self.image.get_size())
-        self.show_hurt_surface.fill((0, 255, 0))
-        self.show_hurt_surface.set_colorkey((0, 255, 0))
-        self.is_hurt = False
-        self.hurt_delay = 0
+    def __init__(self, image_path: str, coords: Tuple[int, int], size: Tuple[int, int] = None,
+                 *groups: pygame.sprite.AbstractGroup):
+        super().__init__(*groups)
+        self.image_path = image_path
+        self.size = size
+        self.coords = coords
 
-    def update(self, game):
-        self.show_hurt_surface.fill((0, 255, 0))
-        for physical_object in game.get_groups():
-            for collided in physical_object:
-                try:
-                    if pygame.sprite.collide_mask(self, collided) and collided is not self:
-                        hurt = True
-                        self.get_hurt(collided)
-                    else:
-                        hurt = False
-                except AttributeError:
-                    hurt = False
+        self.image = load_image(image_path, size)
+        self.rect = pygame.Rect(coords[0], coords[1], *self.image.get_size())
 
-                if not hurt:
-                    self.absence_hurt()
-
-    def get_hurt(self, hearted_object):
-        self.is_hurt = True
-        self.health -= hearted_object.damage
-        self.already_hurt_by.add(hearted_object)
-        self.hurt_delay = 0
-
-    def absence_hurt(self):
-        pass
-
-    def show_hurt(self, screen, color=(255, 0, 0), alpha=60):
-        olist = self.mask.outline()
-        self.show_hurt_surface.set_alpha(alpha)
-        pygame.draw.polygon(self.show_hurt_surface, color, olist, 0)
-        screen.blit(self.show_hurt_surface, self.coords)
+    def update(self, game: 'Game'):
+        self.rect = pygame.Rect(self.coords[0], self.coords[1], *self.image.get_size())
 
 
 class PhysicalSprite(pygame.sprite.Sprite):
+    collision_direction_x: str
+    collision_direction_y: str
+
     def __init__(self, *groups):
         super().__init__(*groups)
         self.mask_rect = pygame.Rect
@@ -172,10 +258,63 @@ class PhysicalSprite(pygame.sprite.Sprite):
             self.collision_direction_y = 'down'
 
     def absence_collision(self, game):
-        pass
+        self.collision_direction_x = None
+        self.collision_direction_y = None
 
     def on_first_collision(self, collided_sprite, game):
         pass
+
+
+class HeartsIncludedCreature:
+    image: pygame.image
+    mask: pygame.mask
+    coords: Any
+    hurt_delay: float
+
+    def __init__(self, team, health):
+        self.team = team
+        self.already_hurt_by = set()
+        self.show_hurt_surface = pygame.Surface(self.image.get_size())
+        self.show_hurt_surface.fill((0, 255, 0))
+        self.show_hurt_surface.set_colorkey((0, 255, 0))
+        self.is_hurt = False
+        self.hurt_delay = 0
+        self.health = health
+
+    def update(self, game):
+        self.show_hurt_surface.fill((0, 255, 0))
+        for physical_object in game.get_groups():
+            for hurt_object in physical_object:
+                try:
+                    if pygame.sprite.collide_mask(self, hurt_object) and hurt_object is not self:
+                        hurt = True
+                        if hurt_object.one_punch_object:
+                            self.get_hurt(hurt_object)
+                        else:
+                            continue
+                    else:
+                        hurt = False
+                except AttributeError:
+                    hurt = False
+
+                if not hurt:
+                    self.absence_hurt()
+
+    def get_hurt(self, hurt_object):
+        self.is_hurt = True
+        self.health -= hurt_object.damage
+        if hurt_object.one_punch_object:
+            self.already_hurt_by.add(hurt_object)
+        self.hurt_delay = 0
+
+    def absence_hurt(self):
+        pass
+
+    def show_hurt(self, screen, color=(255, 0, 0), alpha=60):
+        olist = self.mask.outline()
+        self.show_hurt_surface.set_alpha(alpha)
+        pygame.draw.polygon(self.show_hurt_surface, color, olist, 0)
+        screen.blit(self.show_hurt_surface, self.coords)
 
 
 class CutAnimatedSprite(pygame.sprite.Sprite):
@@ -289,40 +428,3 @@ class AnimatedSprite(pygame.sprite.Sprite):
     @property
     def index(self):
         return self._index
-
-
-class PlayerBodyParts(AnimatedSprite, PhysicalSprite):
-    def __init__(self, images_paths, coords, parent, animation_speed: float = 1, *groups):
-        AnimatedSprite.__init__(self, images_paths, coords)
-        PhysicalSprite.__init__(self, *groups)
-        self.parent = parent
-
-        self.right_sprites = self.action_sprites
-        self.left_sprites = dict()
-        self.animation_speed = animation_speed * 0.1
-
-        for action, images in self.action_sprites.items():
-            rotated_images = [pygame.transform.flip(i, True, False) for i in
-                              self.action_sprites[action]]
-            self.left_sprites[action] = rotated_images
-
-    def start(self, action='idle'):
-        """
-        Начинает воспроизводить анимацию
-        :param action: действие, по которому будет начат анимация
-        :param speed: скорость воспроизведения анимации
-        :return:
-        """
-
-        if action != self.current_action and (not self.is_started() or (not (
-            self.current_action in ('walking-up', 'walking-down') and action ==
-            'walking-x') or self.parent.direction_y is None)):
-            self.change_current_action(action)
-            self._started = True
-            self._index = 0
-
-    def update(self, game):
-        AnimatedSprite.update(self, game)
-
-    def calc(self, game):
-        self.parent.calc(game)
