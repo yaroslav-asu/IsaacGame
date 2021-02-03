@@ -8,7 +8,7 @@ class HealthBar:
         self.game = game
         self.player_health = game.player.health
         self.health_surface = pygame.Surface((200, 50))
-        self.health_surface.fill((30, 30, 30))
+        self.health_surface.fill((40, 30, 30))
         self.health_surface.set_colorkey((30, 30, 30))
         self.rect = self.health_surface.get_rect()
         self.full_heart = load_image('assets/room/full_heart.png', (40, 40))

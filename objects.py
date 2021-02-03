@@ -176,6 +176,3 @@ class Walls(PhysicalSprite, CantHurtObject):
 
     def on_collision(self, collided_sprite, game):
         pass
-
-    # def on_collision(self, collided_sprite, game):
-    #     print(collided_sprite)

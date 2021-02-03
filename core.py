@@ -1,4 +1,5 @@
 from collections import defaultdict
+from random import random
 from typing import Tuple, Any
 import pygame
 import os
@@ -8,6 +9,8 @@ def load_image(path, size=None):
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Unable to find path to image: {path}")
     image = pygame.image.load(path)
+    if isinstance(size, float) or isinstance(size, int):
+        size = list(map(lambda x: int(x * size), image.get_size()))
     if size is not None:
         image = pygame.transform.scale(image, size)
     return image
@@ -15,8 +18,6 @@ def load_image(path, size=None):
 
 def get_rect_from_mask(mask):
     outline = mask.outline()
-    # width = max(outline, key=lambda x: x[0]) - min(outline, key=lambda x: x[0])
-    # height = max(outline, key=lambda x: x[1]) - min(outline, key=lambda x: x[1])
     min_x = outline[0][0]
     min_y = outline[0][1]
     max_x = 0
@@ -37,9 +38,7 @@ def get_rect_from_mask(mask):
 class Game:
 
     def __init__(self, width: int = 959, height: int = 540, name: str = 'Esaac', fps: int = 60):
-        from creatures import Player, EnemyBlob, EnemyMosquito
-        from objects import Rock, Walls
-        from uis import HealthBar
+
         pygame.init()
         pygame.display.set_caption(name)
 
@@ -47,36 +46,10 @@ class Game:
         self.running = True
         self.clock = pygame.time.Clock()
         self.fps = fps
-
-        self.player = Player((100, 50))
-        self.rock_1 = Rock((400, 270))
-        self.rock_2 = Rock((450, 250))
-        # self.blob_1 = EnemyBlob((200, 100))
-        self.blob_2 = EnemyBlob((100, 200))
-        # self.blob_3 = EnemyBlob((300, 400))
-        self.mosquito = EnemyMosquito((200, 200), 'big')
-
-        self.wall = Walls()
-
-        self.interface = SpriteGroup(HealthBar(self))
-        self.objects = []
-        self.physical_group = [self.rock_1, self.rock_2, self.wall]
-        self.creatures = SpriteGroup(self.mosquito, self.player)
-        self.groups = []
-        self.ammos = SpriteGroup()
-
-        self.background = load_image('assets/room/room-background.png')
         self._handlers = defaultdict(list)
 
         self.add_handler(pygame.KEYDOWN, self.player.key_press_handler)
         self.add_handler(pygame.KEYUP, self.player.stop_move)
-
-        physical_group = SpriteGroup()
-        for obj in self.physical_group:
-            physical_group.add(obj)
-
-        for obj in [physical_group, self.ammos, self.interface, self.creatures]:
-            self.add_object(obj)
 
     def add_object(self, obj):
         """
@@ -122,6 +95,20 @@ class Game:
 
     def get_groups(self):
         return self.groups
+
+
+class ItemsSpawner:
+    def __init__(self):
+        self.item_spawned = False
+
+    def spawn_items(self, items_list, game):
+        if not self.item_spawned:
+            for i in items_list:
+                if random() < i[1]:
+                    game.items.add(i[0](self.mask_rect.center))
+                    self.item_spawned = True
+                    return
+            self.item_spawned = True
 
 
 class CantHurtObject:
@@ -199,6 +186,9 @@ class SpriteObject(pygame.sprite.Sprite):
 
     def update(self, game: 'Game'):
         self.rect = pygame.Rect(self.coords[0], self.coords[1], *self.image.get_size())
+
+    def render(self, screen):
+        screen.blit(self.image, self.rect)
 
 
 class PhysicalSprite(pygame.sprite.Sprite):
@@ -279,6 +269,7 @@ class HeartsIncludedCreature:
         self.show_hurt_surface.set_colorkey((0, 255, 0))
         self.is_hurt = False
         self.hurt_delay = 0
+        self.max_health = health
         self.health = health
 
     def update(self, game):
