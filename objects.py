@@ -31,10 +31,10 @@ class Explosion(AnimatedSprite):
                                  self.offset[1]))
 
 
-class PlayerBodyParts(AnimatedSprite, PhysicalSprite):
-    def __init__(self, images_paths, coords, parent, animation_speed: float = 1, *groups):
+class PlayerBodyParts(AnimatedSprite):
+    def __init__(self, images_paths, coords, parent, animation_speed: float = 1):
         AnimatedSprite.__init__(self, images_paths, coords)
-        PhysicalSprite.__init__(self, *groups)
+
         self.parent = parent
 
         self.right_sprites = self.action_sprites
@@ -68,11 +68,11 @@ class PlayerBodyParts(AnimatedSprite, PhysicalSprite):
         self.parent.calc(game)
 
 
-class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
+class Tears(SpriteObject, PhysicalCreature, CanHurtObject):
     def __init__(self, coords, team, game, direction_x=None, direction_y=None, ammo_speed=5,
                  dx=None, dy=None):
         from creatures import Player, EnemyBlob, EnemyMosquito
-        SpriteObject.__init__(self, 'assets/player/ammo/ammo-1.png', coords)
+        SpriteObject.__init__(self, 'assets/weapons/ammo-1.png', coords)
         self.coords = list(coords)
         self.start_coords = coords
         if direction_x == 'left':
@@ -106,7 +106,7 @@ class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
         elif team == 'enemy':
             self.team_list = [EnemyBlob, EnemyMosquito]
 
-        self.damage = 1
+        self.damage = 10
         self.one_punch_object = True
 
     def move(self):
@@ -118,7 +118,7 @@ class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
         self.rect.x, self.rect.y = self.coords[0], self.coords[1]
 
     def update(self, game):
-        PhysicalSprite.update(self, game)
+        PhysicalCreature.update(self, game)
         self.explosion.update(game)
         self.move()
         self.hit_box = self.rect
@@ -130,8 +130,14 @@ class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
             self.explosion.render(screen)
 
     def on_collision(self, collided_sprite, game):
-        if not any([isinstance(collided_sprite, team) for team in self.team_list]) and not \
-            isinstance(collided_sprite, Tears):
+        if not isinstance(collided_sprite, Tears):
+            self.speed_y = 0
+            self.speed_x = 0
+            self.is_killed = True
+
+    def on_collision_with_physical_creature(self, collided_sprite):
+        if self.team != collided_sprite.team and not isinstance(collided_sprite, Tears):
+            collided_sprite.get_hurt(self)
             self.speed_y = 0
             self.speed_x = 0
             self.is_killed = True
@@ -140,18 +146,19 @@ class Tears(SpriteObject, PhysicalSprite, CanHurtObject):
         self.explosion.explode()
 
 
-class Rock(SpriteObject, PhysicalSprite, CantHurtObject):
-    def __init__(self, coords, *groups):
-        PhysicalSprite.__init__(self, *groups)
+class Rock(SpriteObject, PhysicalObject, CantHurtObject):
+    def __init__(self, coords):
+
         SpriteObject.__init__(self, image_path='assets/room/room_rock.png',
                               coords=coords)
         CantHurtObject.__init__(self)
         self.coords = coords
         self.mask_rect = self.rect
+        PhysicalObject.__init__(self)
 
     def update(self, game):
         SpriteObject.update(self, game)
-        PhysicalSprite.update(self, game)
+        PhysicalObject.update(self, game)
 
     def render(self, screen):
         screen.blit(self.image, self.rect)
@@ -160,19 +167,4 @@ class Rock(SpriteObject, PhysicalSprite, CantHurtObject):
         pass
 
 
-class Walls(PhysicalSprite, CantHurtObject):
-    def __init__(self):
-        PhysicalSprite.__init__(self)
-        CantHurtObject.__init__(self)
-        self.rect = pygame.Rect(0, 0, 1000, 85)
-        self.mask_rect = self.rect
 
-    def update(self, game):
-        PhysicalSprite.update(self, game)
-
-    def render(self, screen):
-        # pygame.draw.rect(screen, (0, 100, 0), self.rect)
-        pass
-
-    def on_collision(self, collided_sprite, game):
-        pass

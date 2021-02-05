@@ -35,10 +35,22 @@ def get_rect_from_mask(mask):
     return rect
 
 
+def check_doors(default_door_position, room):
+    if (default_door_position == 'any' and any(room.doors_list)) or \
+        (default_door_position == 'left' and room.doors_list[1]) or \
+        (default_door_position == 'right' and room.doors_list[3]) or \
+        (default_door_position == 'up' and room.doors_list[0]) or \
+        (default_door_position == 'down' and room.doors_list[2]):
+        return False
+    return True
+
+
 class Game:
+    room: Any
 
     def __init__(self, width: int = 959, height: int = 540, name: str = 'Esaac', fps: int = 60):
 
+        # self.rooms_seeds_dict = dict()
         pygame.init()
         pygame.display.set_caption(name)
 
@@ -95,6 +107,29 @@ class Game:
 
     def get_groups(self):
         return self.groups
+
+    def create_new_room(self, coords, default_door_position):
+        from room import Room
+        room = Room(coords, self)
+        no_default_door = check_doors(default_door_position, room)
+        print(self.rooms_seeds_dict)
+        while no_default_door:
+            self.rooms_seeds_dict.pop(coords)
+            room = Room(coords, self)
+            no_default_door = check_doors(default_door_position, room)
+
+        self.room = room
+        self.room.coords = coords
+        self.objects = []
+        self.groups = []
+        self.physical_group = SpriteGroup()
+        self.player_group = SpriteGroup(self.player)
+        self.items = SpriteGroup()
+        self.creatures = SpriteGroup()
+        self.ammos = SpriteGroup()
+        for obj in [self.room, self.physical_group, self.items, self.ammos, self.interface,
+                    self.creatures, self.player_group]:
+            self.add_object(obj)
 
 
 class ItemsSpawner:
@@ -167,6 +202,10 @@ class SpriteGroup(RenderableObject, pygame.sprite.Group):
     def render(self, screen: pygame.Surface):
         self.draw(screen)
 
+    def extend(self, list):
+        for obj in list:
+            self.add(obj)
+
 
 class SpriteObject(pygame.sprite.Sprite):
     """
@@ -174,15 +213,16 @@ class SpriteObject(pygame.sprite.Sprite):
     поэтому для урпощения жизни были добавлены параметры для создания изображения вместе с спрайтом
     """
 
-    def __init__(self, image_path: str, coords: Tuple[int, int], size: Tuple[int, int] = None,
-                 *groups: pygame.sprite.AbstractGroup):
-        super().__init__(*groups)
+    def __init__(self, image_path: str, coords: Tuple[int, int], size: Tuple[int, int] = None):
+        super().__init__()
         self.image_path = image_path
         self.size = size
         self.coords = coords
 
         self.image = load_image(image_path, size)
         self.rect = pygame.Rect(coords[0], coords[1], *self.image.get_size())
+        self.mask = pygame.mask.from_surface(self.image)
+        self.mask_rect = get_rect_from_mask(self.mask)
 
     def update(self, game: 'Game'):
         self.rect = pygame.Rect(self.coords[0], self.coords[1], *self.image.get_size())
@@ -191,9 +231,14 @@ class SpriteObject(pygame.sprite.Sprite):
         screen.blit(self.image, self.rect)
 
 
-class PhysicalSprite(pygame.sprite.Sprite):
-    collision_direction_x: str
-    collision_direction_y: str
+class PhysicalObject(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+
+
+class PhysicalCreature(pygame.sprite.Sprite):
+    collision_direction_x: Any
+    collision_direction_y: Any
 
     def __init__(self, *groups):
         super().__init__(*groups)
@@ -203,8 +248,8 @@ class PhysicalSprite(pygame.sprite.Sprite):
 
     def update(self, game):
         collision = False
-        for physical_object in game.get_groups():
-            for obj in physical_object:
+        for objects_group in game.get_groups():
+            for obj in objects_group:
                 try:
                     if pygame.sprite.collide_mask(self, obj):
                         collided = obj
@@ -216,11 +261,17 @@ class PhysicalSprite(pygame.sprite.Sprite):
                     else:
                         continue
 
-                if not isinstance(collided, PhysicalSprite):
+                if not isinstance(collided, PhysicalObject) and not \
+                    isinstance(collided, PhysicalCreature):
                     continue
+
                 if collided is not self:
+                    if isinstance(collided, PhysicalCreature):
+                        self.on_collision_with_physical_creature(collided)
+                    else:
+                        self.on_collision(collided, game)
                     collision = True
-                    self.on_collision(collided, game)
+
         if not collision:
             self.absence_collision(game)
 
@@ -247,12 +298,12 @@ class PhysicalSprite(pygame.sprite.Sprite):
             self.mask_rect.centerx < collided_sprite.mask_rect.right:
             self.collision_direction_y = 'down'
 
+    def on_collision_with_physical_creature(self, collided_object):
+        pass
+
     def absence_collision(self, game):
         self.collision_direction_x = None
         self.collision_direction_y = None
-
-    def on_first_collision(self, collided_sprite, game):
-        pass
 
 
 class HeartsIncludedCreature:
@@ -277,10 +328,12 @@ class HeartsIncludedCreature:
         for physical_object in game.get_groups():
             for hurt_object in physical_object:
                 try:
-                    if pygame.sprite.collide_mask(self, hurt_object) and hurt_object is not self:
+                    if pygame.sprite.collide_mask(self,
+                                                  hurt_object) and hurt_object is not self:
                         hurt = True
                         if hurt_object.one_punch_object:
-                            self.get_hurt(hurt_object)
+                            # self.get_hurt(hurt_object)
+                            pass
                         else:
                             continue
                     else:
@@ -341,9 +394,8 @@ class CutAnimatedSprite(pygame.sprite.Sprite):
 
 class AnimatedSprite(pygame.sprite.Sprite):
     def __init__(self, images_paths, coords,
-                 size=1, current_action='idle', animation_speed: float = 1, color_key=None,
-                 *groups):
-        super().__init__(*groups)
+                 size=1, current_action='idle', animation_speed: float = 1, color_key=None):
+        super().__init__()
 
         self.action_sprites = dict()
         for action, paths in images_paths.items():

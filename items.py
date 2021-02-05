@@ -1,6 +1,6 @@
 import pygame
 
-from core import SpriteObject, PhysicalSprite
+from core import SpriteObject, PhysicalCreature
 from creatures import Player
 
 
