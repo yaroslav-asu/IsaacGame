@@ -270,9 +270,6 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
         self.attack_delay = 0
         player.get_hurt(self)
 
-    # def kill(self):
-    #     super().kill()
-
 
 class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
     mask: pygame.mask.Mask
@@ -281,6 +278,7 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
 
         CantHurtObject.__init__(self)
 
+        self.is_invisible = False
         head_sprite_map: Dict[str, List[str]] = dict()
         for action_folder in ('idle', 'walking-x', 'walking-down', 'walking-up', 'attack-x',
                               'attack-up', 'attack-down'):
@@ -333,6 +331,9 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
         self.collision_direction_y = None
 
         self.is_attack = False
+        self.is_killed = False
+        self.is_stopped = False
+        self.explosion = Explosion(self, self.coords, (70, 55), 0.8, 0.5)
         health = 10
         PhysicalCreature.__init__(self)
         HeartsIncludedCreature.__init__(self, 'player', health)
@@ -371,7 +372,10 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
 
     def render(self, screen):
         screen.blit(self.image, self.rect)
-        if self.is_hurt:
+
+        if self.is_killed:
+            self.explosion.render(screen)
+        elif self.is_hurt and not self.is_invisible:
             self.show_hurt(screen)
 
     def update(self, game):
@@ -420,8 +424,17 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
         self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
         PhysicalCreature.update(self, game)
         HeartsIncludedCreature.update(self, game)
+        if self.is_killed:
+            self.explosion.update(game)
+            self.explosion.explode()
+            self.is_stopped = True
+            if self.explosion.index == 7:
+                game.end_game()
 
     def move(self, direction_x, direction_y, collision_direction_x, collision_direction_y):
+        if self.is_stopped:
+            return
+        print(collision_direction_x, collision_direction_y)
         if direction_x == 'left' and not collision_direction_x == 'left':
             for rect in [self.rect, self.render_rect, self.head_sprite.rect,
                          self.body_sprite.rect, self.mask_rect]:
@@ -449,9 +462,6 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
                      self.body_sprite.rect, self.mask_rect]:
             rect.x = x
             rect.y = y
-
-
-
 
     def attack(self, game):
         team = 'player'
@@ -488,12 +498,6 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
         else:
             self.is_attack = False
 
-    # def on_collision(self, collided_sprite, game):
-    #     if isinstance(collided_sprite, Tears) or collided_sprite in game.creatures or \
-    #         collided_sprite in game.items:
-    #         return
-    #     PhysicalCreature.on_collision(self, collided_sprite, game)
-
     def absence_collision(self, game):
         self.collision_direction_x, self.collision_direction_y = None, None
 
@@ -501,6 +505,8 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
         if (isinstance(hurt_object, Tears) or isinstance(hurt_object, EnemyMosquito)) and \
             hurt_object not in self.already_hurt_by and hurt_object.team == 'enemy':
             HeartsIncludedCreature.get_hurt(self, hurt_object)
+        if self.health <= 0:
+            self.is_killed = True
 
     def heal(self, health):
         if self.health + health <= self.max_health:

@@ -20,9 +20,9 @@ class Explosion(AnimatedSprite):
 
     def update(self, game):
         AnimatedSprite.update(self, game)
-        if self.index == 4:
+        if self.index >= 4:
             self.parent.image.set_alpha(0)
-        elif self.index == 7:
+        if self.index == 7:
             pygame.sprite.Sprite.kill(self.parent)
             pygame.sprite.Sprite.kill(self)
 
@@ -106,7 +106,7 @@ class Tears(SpriteObject, PhysicalCreature, CanHurtObject):
         elif team == 'enemy':
             self.team_list = [EnemyBlob, EnemyMosquito]
 
-        self.damage = 10
+        self.damage = 1
         self.one_punch_object = True
 
     def move(self):

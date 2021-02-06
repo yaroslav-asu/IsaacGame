@@ -47,10 +47,19 @@ def check_doors(default_door_position, room):
 
 class Game:
     room: Any
+    interface: Any
+    objects: list
+    groups: list
+    physical_group: Any
+    player_group: Any
+    items: Any
+    creatures: Any
+    ammos: Any
+    gameover: bool
+    background: Any
+    rooms_seeds_dict: dict
 
     def __init__(self, width: int = 959, height: int = 540, name: str = 'Esaac', fps: int = 60):
-
-        # self.rooms_seeds_dict = dict()
         pygame.init()
         pygame.display.set_caption(name)
 
@@ -71,12 +80,23 @@ class Game:
         :param obj: созданный объект для отрисовки
         """
         self.objects.append(obj)
-        if isinstance(obj, SpriteGroup):
+        if isinstance(obj, SpriteGroup) and obj != self.interface:
             self.groups.append(obj)
+
+    def gameover_render(self):
+        self.screen.fill((40, 40, 40))
+        Text(f'Вы умерли, может быть вам повезет в другой раз',
+             (160, 220), 50, (255, 255, 255)).render(self.screen)
+        Text(f'Пройдено комнат: {len(self.rooms_seeds_dict.keys()) - 1}', (350, 260),
+             50, (255, 255, 255)).render(self.screen)
 
     def run(self):
         while self.running:
-            self.screen.blit(self.background, (0, 0))
+            if not self.gameover:
+                self.screen.blit(self.background, (0, 0))
+            else:
+                self.gameover_render()
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
@@ -112,7 +132,6 @@ class Game:
         from room import Room
         room = Room(coords, self)
         no_default_door = check_doors(default_door_position, room)
-        print(self.rooms_seeds_dict)
         while no_default_door:
             self.rooms_seeds_dict.pop(coords)
             room = Room(coords, self)
@@ -130,6 +149,11 @@ class Game:
         for obj in [self.room, self.physical_group, self.items, self.ammos, self.interface,
                     self.creatures, self.player_group]:
             self.add_object(obj)
+
+    def end_game(self):
+        self.objects = []
+        self.groups = []
+        self.gameover = True
 
 
 class ItemsSpawner:
@@ -205,6 +229,72 @@ class SpriteGroup(RenderableObject, pygame.sprite.Group):
     def extend(self, list):
         for obj in list:
             self.add(obj)
+
+
+class Text(RenderableObject):
+    text_surface: Any
+    """
+    Обёртка вокруг текста для более удобной отрисовке на экране
+    """
+
+    def __init__(self, text, pos, font_size=20, color=(40, 40, 40)):
+        """
+        :param text: стартовый текст для отрисовки
+        :param pos: кортеж с координатами верхнего левого угла текста
+        :param font_size: размер шрифта
+        :param color: цвет для отрисовки
+        """
+        pygame.font.init()
+        self.color = color
+        self.pos = pos
+        self.__text = text
+        self.__freeze = False
+        self.rect = pygame.Rect
+        self.font = pygame.font.Font('assets/Thintel.ttf', font_size)
+        self.setup()
+
+    def render(self, screen):
+        screen.blit(self.text_surface, self.pos)
+
+    def freeze(self):
+        """
+        Замораживает текст, запрещая его изменять до момента разморозки
+        """
+        self.__freeze = True
+
+    def unfreeze(self):
+        """
+        Снимает заморозку текста, позволяя его изменять
+        :return:
+        """
+        self.__freeze = False
+
+    def set_text(self, text):
+        """
+        Назначает текст для отрисовки
+        :param text: текст, который будет отображён на экране
+        """
+        if self.__freeze:
+            return
+        self.__text = text
+
+        self.text_surface = self.font.render(self.__text, False, self.color)
+
+    def setup(self, **kwargs):
+        """
+        Инициализация текста для отрисовки
+        :param **kwargs:
+        :param game: экземпляр игры
+        """
+        self.text_surface = self.font.render(self.__text, False, self.color)
+
+    def add_internal(self, arg):
+        pass
+
+
+class RoomsCounterText(Text):
+    def update(self, game):
+        self.set_text(f'Комнат пройдено: {len(game.rooms_seeds_dict.keys()) - 1}')
 
 
 class SpriteObject(pygame.sprite.Sprite):
@@ -289,7 +379,8 @@ class PhysicalCreature(pygame.sprite.Sprite):
             collided_sprite.mask_rect.bottom:
             self.collision_direction_x = 'left'
 
-        if collided_sprite.mask_rect.bottom > self.mask_rect.top > collided_sprite.mask_rect.top and \
+        if collided_sprite.mask_rect.bottom > self.mask_rect.top > \
+            collided_sprite.mask_rect.bottom - 20 and \
             collided_sprite.mask_rect.left < self.mask_rect.right and \
             collided_sprite.mask_rect.right > self.mask_rect.left:
             self.collision_direction_y = 'up'

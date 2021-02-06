@@ -1,4 +1,4 @@
-import pprint
+
 from random import randint
 import random
 
@@ -14,8 +14,6 @@ from creatures import EnemyBlob, EnemyMosquito
 
 def rotate_center(image, angle, coords):
     rotated_image = pygame.transform.rotate(image, angle)
-    # new_rect = rotated_image.get_rect(center=image.get_rect(center=(coords[0], coords[1])).center)
-    # return rotated_image, new_rect
     return rotated_image
 
 
@@ -45,7 +43,6 @@ class Room(SpriteGroup):
             self.seed = game.rooms_seeds_dict[coords]
             self.setup_objects(self.seed)
         self.setup_doors(self.seed)
-        # print(game.rooms_seeds_dict)
 
     def setup_doors(self, seed):
         random.seed(seed)
@@ -83,7 +80,6 @@ class Room(SpriteGroup):
             self.objects_list.append(obj_list)
 
     def setup_enemies(self, objects_list, seed):
-        # pprint.pprint(objects_list)
         random.seed(seed)
         for i in range(0, 6):
             for j in range(0, 8):
@@ -196,4 +192,3 @@ class Door(SpriteObject):
                 self.room_created = True
         if not game.room.enemy_group:
             self.open()
-        # print(game.rooms_seeds_dict)
