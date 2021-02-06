@@ -366,28 +366,46 @@ class PhysicalCreature(pygame.sprite.Sprite):
             self.absence_collision(game)
 
     def on_collision(self, collided_sprite, game):
+        # self.collision_direction_x = None
+        # self.collision_direction_y = None
+        collided_rect = collided_sprite.mask_rect
+        collided_rect_points = [i for i in [collided_rect.left, collided_rect.right,
+                                            collided_rect.top, collided_rect.bottom]]
         if collided_sprite.mask_rect.left <= self.mask_rect.right < \
             collided_sprite.mask_rect.right \
             and not self.mask_rect.left > collided_sprite.mask_rect.left and \
             collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
             collided_sprite.mask_rect.bottom:
+            print('right')
             self.collision_direction_x = 'right'
 
         elif collided_sprite.mask_rect.right > self.mask_rect.left > collided_sprite.mask_rect.left and \
             not self.mask_rect.right < collided_sprite.mask_rect.right and \
             collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
             collided_sprite.mask_rect.bottom:
+            print('left')
             self.collision_direction_x = 'left'
+        else:
+            print('x None')
 
         if collided_sprite.mask_rect.bottom > self.mask_rect.top > \
             collided_sprite.mask_rect.bottom - 20 and \
             collided_sprite.mask_rect.left < self.mask_rect.right and \
             collided_sprite.mask_rect.right > self.mask_rect.left:
+            print('up')
             self.collision_direction_y = 'up'
 
-        elif collided_sprite.mask_rect.top < self.mask_rect.bottom and collided_sprite.mask_rect.left < \
-            self.mask_rect.centerx < collided_sprite.mask_rect.right:
+        # elif collided_sprite.mask_rect.top < self.mask_rect.bottom and collided_sprite.mask_rect.left < \
+        #     self.mask_rect.centerx < collided_sprite.mask_rect.right:
+        #     self.collision_direction_y = 'down'
+        elif collided_sprite.mask_rect.top < self.mask_rect.bottom < \
+            collided_sprite.mask_rect.top + 10 and \
+            collided_sprite.mask_rect.left + 20 < self.mask_rect.right:
+            print('down')
             self.collision_direction_y = 'down'
+        else:
+            print('y None')
+        print()
 
     def on_collision_with_physical_creature(self, collided_object):
         pass
@@ -395,6 +413,12 @@ class PhysicalCreature(pygame.sprite.Sprite):
     def absence_collision(self, game):
         self.collision_direction_x = None
         self.collision_direction_y = None
+
+    # def absence_collision_x(self):
+    #     self.collision_direction_x = None
+    #
+    # def absence_collision_y(self):
+    #     self.collision_direction_y = None
 
 
 class HeartsIncludedCreature:

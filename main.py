@@ -15,7 +15,7 @@ class MyGame(Game):
         from room import Room
         self.rooms_seeds_dict = {}
         self.start_time = time()
-        self.player = Player((300, 300))
+        self.player = Player((460, 230))
         self.gameover = False
 
         # door_cords (450, 25), (80, 210), (450, 455), (820, 210)

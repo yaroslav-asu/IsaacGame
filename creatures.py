@@ -326,7 +326,6 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
                                  self.head_sprite.image.get_height() +
                                  self.body_sprite.image.get_height()))
         self.mask = pygame.mask.from_surface(self.image)
-        self.mask_rect = get_rect_from_mask(self.mask)
         self.collision_direction_x = None
         self.collision_direction_y = None
 
@@ -337,6 +336,7 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
         health = 10
         PhysicalCreature.__init__(self)
         HeartsIncludedCreature.__init__(self, 'player', health)
+        self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
 
     def key_press_handler(self, event):
         if event.key == pygame.K_a:
@@ -434,7 +434,6 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
     def move(self, direction_x, direction_y, collision_direction_x, collision_direction_y):
         if self.is_stopped:
             return
-        print(collision_direction_x, collision_direction_y)
         if direction_x == 'left' and not collision_direction_x == 'left':
             for rect in [self.rect, self.render_rect, self.head_sprite.rect,
                          self.body_sprite.rect, self.mask_rect]:
@@ -497,6 +496,29 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
             self.is_attack = True
         else:
             self.is_attack = False
+
+    # def on_collision(self, collided_sprite, game):
+    #     if collided_sprite.mask_rect.right > self.mask_rect.left > \
+    #         collided_sprite.mask_rect.right - 15:
+    #         print('left', collided_sprite.mask_rect.right > self.mask_rect.left > \
+    #         collided_sprite.mask_rect.right - 15)
+    #         pass
+    #     else:
+    #         print('left', collided_sprite.mask_rect.right > self.mask_rect.left > \
+    #         collided_sprite.mask_rect.right - 15)
+    #         pass
+    #
+    #     if collided_sprite.mask_rect.top < self.mask_rect.bottom < collided_sprite.mask_rect.top \
+    #         + 10:
+    #         print('down', collided_sprite.mask_rect.top < self.mask_rect.bottom < collided_sprite.mask_rect.top \
+    #         + 10)
+    #         pass
+    #     else:
+    #         print('down', collided_sprite.mask_rect.top < self.mask_rect.bottom < collided_sprite.mask_rect.top \
+    #         + 10)
+    #         pass
+    #
+    #     print()
 
     def absence_collision(self, game):
         self.collision_direction_x, self.collision_direction_y = None, None
