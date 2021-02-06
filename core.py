@@ -6,6 +6,12 @@ import os
 
 
 def load_image(path, size=None):
+    """
+    загрузка изображения
+    :param path: путь к файлу
+    :param size: размер выходного изображения
+    :return: изображение
+    """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Unable to find path to image: {path}")
     image = pygame.image.load(path)
@@ -17,6 +23,11 @@ def load_image(path, size=None):
 
 
 def get_rect_from_mask(mask):
+    """
+    получение rect из маски объекта
+    :param mask: маска объекта
+    :return: объект rect
+    """
     outline = mask.outline()
     min_x = outline[0][0]
     min_y = outline[0][1]
@@ -36,11 +47,17 @@ def get_rect_from_mask(mask):
 
 
 def check_doors(default_door_position, room):
+    """
+    проверяет существует ли дверь в соседней комнате из которой должен будет выйти персонаж
+    :param default_door_position: положение двери
+    :param room: объект комнаты
+    :return: bool
+    """
     if (default_door_position == 'any' and any(room.doors_list)) or \
         (default_door_position == 'left' and room.doors_list[1]) or \
         (default_door_position == 'right' and room.doors_list[3]) or \
         (default_door_position == 'up' and room.doors_list[0]) or \
-        (default_door_position == 'down' and room.doors_list[2]):
+       (default_door_position == 'down' and room.doors_list[2]):
         return False
     return True
 
@@ -58,6 +75,8 @@ class Game:
     gameover: bool
     background: Any
     rooms_seeds_dict: dict
+    player: Any
+    """класс комнаты"""
 
     def __init__(self, width: int = 959, height: int = 540, name: str = 'Esaac', fps: int = 60):
         pygame.init()
@@ -76,7 +95,6 @@ class Game:
         """
         Добавляет объект для отрисовки на экран.
 
-        Должен быть экземпляром класса или наследника класса RenderableObject
         :param obj: созданный объект для отрисовки
         """
         self.objects.append(obj)
@@ -84,6 +102,9 @@ class Game:
             self.groups.append(obj)
 
     def gameover_render(self):
+        """
+        сообщение при смерти персонажа
+        """
         self.screen.fill((40, 40, 40))
         Text(f'Вы умерли, может быть вам повезет в другой раз',
              (160, 220), 50, (255, 255, 255)).render(self.screen)
@@ -91,6 +112,9 @@ class Game:
              50, (255, 255, 255)).render(self.screen)
 
     def run(self):
+        """
+        главный цикл программы
+        """
         while self.running:
             if not self.gameover:
                 self.screen.blit(self.background, (0, 0))
@@ -111,6 +135,9 @@ class Game:
         pygame.quit()
 
     def draw(self):
+        """
+        отрисока объектов на экран
+        """
         for obj in self.objects:
             if isinstance(obj, SpriteGroup):
                 for i in obj:
@@ -119,16 +146,30 @@ class Game:
                 obj.render(self.screen)
 
     def add_handler(self, event_type, handler):
+        """
+        добавление обработчика нажатий на кнопки
+        :param event_type: тип кнопки
+        :param handler: функция обработчик
+        """
         self._handlers[event_type].append(handler)
 
     def update(self):
+        """
+        обновление всех объектов
+        """
         for obj in self.objects:
             obj.update(self)
 
     def get_groups(self):
+        """получение всех групп"""
         return self.groups
 
     def create_new_room(self, coords, default_door_position):
+        """
+        создание новой комнаты
+        :param coords: ее координаты
+        :param default_door_position: дверь которая должна быть у двери
+        """
         from room import Room
         room = Room(coords, self)
         no_default_door = check_doors(default_door_position, room)
@@ -151,16 +192,26 @@ class Game:
             self.add_object(obj)
 
     def end_game(self):
+        """
+        событие по завершении игры
+        """
         self.objects = []
         self.groups = []
         self.gameover = True
 
 
 class ItemsSpawner:
+    mask_rect: pygame.Rect
+    """класс объектов которые создают вещи, которые можно подбирать"""
     def __init__(self):
         self.item_spawned = False
 
     def spawn_items(self, items_list, game):
+        """
+        спавн предметов
+        :param items_list: список вещей
+        :param game: объект игры
+        """
         if not self.item_spawned:
             for i in items_list:
                 if random() < i[1]:
@@ -171,11 +222,13 @@ class ItemsSpawner:
 
 
 class CantHurtObject:
+    """объект который не  может бить """
     def __init__(self):
         self.can_hurt = False
 
 
 class CanHurtObject:
+    """объект который может бить """
     def __init__(self):
         self.can_hurt = True
 
@@ -185,49 +238,56 @@ class RenderableObject:
     Абстракный класс для описание минимального элемента, который может быть отображён на экране
     """
 
-    def render(self, screen: pygame.Surface):
+    def render(self, screen):
         """
-        Выполняется каждрый раз при отрисовке кадра.
-
-        Его необходимо переопределить
-        :param screen: полотно для отрисовки
-        :return:
+        рендеринг объекта
+        :param screen: экран
         """
         pass
 
     def setup(self, game):
         """
-        Вызывается при создании объекта
+        создание объекта
         :param game: полотно для отрисовки
         """
         pass
 
     def update(self, game):
         """
-        Итерация игры, обновляющая состояние объекта
-        :param game:
-        :return:
+        обновление объекта
+        :param game: объект игры
         """
         pass
 
 
 class SpriteGroup(RenderableObject, pygame.sprite.Group):
     """
-    Класс для отрисовки группы спрайтов. Сами по себе спрайты недоступны для отрисовки и
-    подлежат группировке в набор объектов, который уже может быть отрисован
+    Класс для отрисовки группы спрайтов
     """
 
     def setup(self, game):
+        """
+        Установка спрайта
+        :param game: класс игры
+        """
         pass
 
     def update(self, game):
+        """
+        обновление
+        :param game: игра
+        """
         pygame.sprite.Group.update(self, game)
 
     def render(self, screen: pygame.Surface):
         self.draw(screen)
 
-    def extend(self, list):
-        for obj in list:
+    def extend(self, obj_list):
+        """
+        помещение групп из списка в отрисовку
+        :param obj_list: список
+        """
+        for obj in obj_list:
             self.add(obj)
 
 
@@ -283,18 +343,11 @@ class Text(RenderableObject):
     def setup(self, **kwargs):
         """
         Инициализация текста для отрисовки
-        :param **kwargs:
-        :param game: экземпляр игры
         """
         self.text_surface = self.font.render(self.__text, False, self.color)
 
     def add_internal(self, arg):
         pass
-
-
-class RoomsCounterText(Text):
-    def update(self, game):
-        self.set_text(f'Комнат пройдено: {len(game.rooms_seeds_dict.keys()) - 1}')
 
 
 class SpriteObject(pygame.sprite.Sprite):
@@ -303,7 +356,7 @@ class SpriteObject(pygame.sprite.Sprite):
     поэтому для урпощения жизни были добавлены параметры для создания изображения вместе с спрайтом
     """
 
-    def __init__(self, image_path: str, coords: Tuple[int, int], size: Tuple[int, int] = None):
+    def __init__(self, image_path, coords, size= None):
         super().__init__()
         self.image_path = image_path
         self.size = size
@@ -322,6 +375,9 @@ class SpriteObject(pygame.sprite.Sprite):
 
 
 class PhysicalObject(pygame.sprite.Sprite):
+    """
+    физический объект
+    """
     def __init__(self):
         super().__init__()
 
@@ -329,15 +385,21 @@ class PhysicalObject(pygame.sprite.Sprite):
 class PhysicalCreature(pygame.sprite.Sprite):
     collision_direction_x: Any
     collision_direction_y: Any
+    """
+    физическое существо
+    """
 
     def __init__(self, *groups):
         super().__init__(*groups)
         self.mask_rect = pygame.Rect
-        self.previously_collided = set()
-        self.current_collided = set()
+        self.is_collision_direction_x_changed = False
+        self.is_collision_direction_y_changed = False
 
     def update(self, game):
+        """обновление"""
         collision = False
+        self.is_collision_direction_x_changed = False
+        self.is_collision_direction_y_changed = False
         for objects_group in game.get_groups():
             for obj in objects_group:
                 try:
@@ -352,7 +414,7 @@ class PhysicalCreature(pygame.sprite.Sprite):
                         continue
 
                 if not isinstance(collided, PhysicalObject) and not \
-                    isinstance(collided, PhysicalCreature):
+                   isinstance(collided, PhysicalCreature):
                     continue
 
                 if collided is not self:
@@ -361,64 +423,57 @@ class PhysicalCreature(pygame.sprite.Sprite):
                     else:
                         self.on_collision(collided, game)
                     collision = True
-
-        if not collision:
+        if collision:
+            if not self.is_collision_direction_x_changed:
+                self.collision_direction_x = None
+            if not self.is_collision_direction_y_changed:
+                self.collision_direction_y = None
+        else:
             self.absence_collision(game)
 
     def on_collision(self, collided_sprite, game):
-        # self.collision_direction_x = None
-        # self.collision_direction_y = None
-        collided_rect = collided_sprite.mask_rect
-        collided_rect_points = [i for i in [collided_rect.left, collided_rect.right,
-                                            collided_rect.top, collided_rect.bottom]]
+        """
+        действие на сколкновение
+        :param collided_sprite: с чем столкнулось
+        :param game: игра
+        """
         if collided_sprite.mask_rect.left <= self.mask_rect.right < \
             collided_sprite.mask_rect.right \
             and not self.mask_rect.left > collided_sprite.mask_rect.left and \
             collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
-            collided_sprite.mask_rect.bottom:
-            print('right')
+           collided_sprite.mask_rect.bottom:
             self.collision_direction_x = 'right'
+            self.is_collision_direction_x_changed = True
 
-        elif collided_sprite.mask_rect.right > self.mask_rect.left > collided_sprite.mask_rect.left and \
-            not self.mask_rect.right < collided_sprite.mask_rect.right and \
+        elif collided_sprite.mask_rect.right > self.mask_rect.left > collided_sprite.mask_rect.left \
+            and not self.mask_rect.right < collided_sprite.mask_rect.right and \
             collided_sprite.mask_rect.top < self.mask_rect.bottom and self.mask_rect.top < \
-            collided_sprite.mask_rect.bottom:
-            print('left')
+           collided_sprite.mask_rect.bottom:
             self.collision_direction_x = 'left'
-        else:
-            print('x None')
+            self.is_collision_direction_x_changed = True
 
         if collided_sprite.mask_rect.bottom > self.mask_rect.top > \
             collided_sprite.mask_rect.bottom - 20 and \
             collided_sprite.mask_rect.left < self.mask_rect.right and \
-            collided_sprite.mask_rect.right > self.mask_rect.left:
-            print('up')
+           collided_sprite.mask_rect.right > self.mask_rect.left:
             self.collision_direction_y = 'up'
+            self.is_collision_direction_y_changed = True
 
-        # elif collided_sprite.mask_rect.top < self.mask_rect.bottom and collided_sprite.mask_rect.left < \
-        #     self.mask_rect.centerx < collided_sprite.mask_rect.right:
-        #     self.collision_direction_y = 'down'
         elif collided_sprite.mask_rect.top < self.mask_rect.bottom < \
-            collided_sprite.mask_rect.top + 10 and \
-            collided_sprite.mask_rect.left + 20 < self.mask_rect.right:
-            print('down')
+            collided_sprite.mask_rect.top + 20 and \
+            collided_sprite.mask_rect.left < self.mask_rect.right and \
+           collided_sprite.mask_rect.right > self.mask_rect.left:
             self.collision_direction_y = 'down'
-        else:
-            print('y None')
-        print()
+            self.is_collision_direction_y_changed = True
 
     def on_collision_with_physical_creature(self, collided_object):
+        """действие при столкновении с живым существом"""
         pass
 
     def absence_collision(self, game):
+        """действие при отсутствии коллизии"""
         self.collision_direction_x = None
         self.collision_direction_y = None
-
-    # def absence_collision_x(self):
-    #     self.collision_direction_x = None
-    #
-    # def absence_collision_y(self):
-    #     self.collision_direction_y = None
 
 
 class HeartsIncludedCreature:
@@ -426,7 +481,7 @@ class HeartsIncludedCreature:
     mask: pygame.mask
     coords: Any
     hurt_delay: float
-
+    """существо с хп"""
     def __init__(self, team, health):
         self.team = team
         self.already_hurt_by = set()
@@ -443,11 +498,10 @@ class HeartsIncludedCreature:
         for physical_object in game.get_groups():
             for hurt_object in physical_object:
                 try:
-                    if pygame.sprite.collide_mask(self,
-                                                  hurt_object) and hurt_object is not self:
+                    if pygame.sprite.collide_mask(self, hurt_object) and hurt_object is not self:
                         hurt = True
                         if hurt_object.one_punch_object:
-                            # self.get_hurt(hurt_object)
+                            self.get_hurt(hurt_object)
                             pass
                         else:
                             continue
@@ -460,6 +514,10 @@ class HeartsIncludedCreature:
                     self.absence_hurt()
 
     def get_hurt(self, hurt_object):
+        """
+        получить урон
+        :param hurt_object: от чего получить урон
+        """
         self.is_hurt = True
         self.health -= hurt_object.damage
         if hurt_object.one_punch_object:
@@ -467,9 +525,18 @@ class HeartsIncludedCreature:
         self.hurt_delay = 0
 
     def absence_hurt(self):
+        """
+        действие при отсутсвии урона
+        """
         pass
 
     def show_hurt(self, screen, color=(255, 0, 0), alpha=60):
+        """
+        показать удар
+        :param screen: экран
+        :param color: цвет
+        :param alpha: прозрачность
+        """
         olist = self.mask.outline()
         self.show_hurt_surface.set_alpha(alpha)
         pygame.draw.polygon(self.show_hurt_surface, color, olist, 0)
@@ -490,6 +557,12 @@ class CutAnimatedSprite(pygame.sprite.Sprite):
         self.animation_speed = speed
 
     def cut_sheet(self, sheet, columns, rows):
+        """
+        разрезание картинки на кадры
+        :param sheet: картинка для разрезания
+        :param columns: склоько столбцов
+        :param rows: сколько колонок
+        """
 
         self.rect = pygame.Rect(0, 0, sheet.get_width() // columns,
                                 sheet.get_height() // rows)
@@ -543,8 +616,6 @@ class AnimatedSprite(pygame.sprite.Sprite):
         """
         Начинает воспроизводить анимацию
         :param action: действие, по которому будет начат анимация
-        :param speed: скорость воспроизведения анимации
-        :return:
         """
 
         if action != self.current_action:

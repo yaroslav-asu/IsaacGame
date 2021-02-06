@@ -1,15 +1,11 @@
 from time import time
-
-import random
-
-random.random()
-from core import Game, Text, RoomsCounterText
-from items import HalfHeart, FullHeart
+from core import Game
+from uis import RoomsCounterText
 
 
 class MyGame(Game):
     def __init__(self):
-        from creatures import Player, EnemyBlob, EnemyMosquito
+        from creatures import Player
         from core import Game, SpriteGroup, load_image
         from uis import HealthBar
         from room import Room
@@ -21,9 +17,11 @@ class MyGame(Game):
         # door_cords (450, 25), (80, 210), (450, 455), (820, 210)
 
         self.room = Room((0, 0), self)
-        self.interface = SpriteGroup(HealthBar(self), RoomsCounterText(f'Комнат пройдено: '
-                                          f'{len(self.rooms_seeds_dict.keys()) - 1}',
-                                          (0, 40), 36, (180, 180, 180)))
+        self.interface = SpriteGroup(HealthBar(self),
+                                     RoomsCounterText(f'Комнат пройдено: '
+                                                      f'{len(self.rooms_seeds_dict.keys()) - 1}',
+                                                      (0, 40), 36,
+                                                      (180, 180, 180)))
         self.background = load_image('assets/room/room-background.png')
         self.create_new_room((0, 0), 'any')
 

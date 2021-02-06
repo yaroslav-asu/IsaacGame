@@ -1,17 +1,20 @@
 import math
 import os
-from random import randint, random
+from random import randint
 from typing import Dict, List, Any
 
 import pygame
 
 from objects import Explosion, Tears, PlayerBodyParts
-from core import CutAnimatedSprite, PhysicalCreature, CantHurtObject, HeartsIncludedCreature, \
+from core import CutAnimatedSprite, CantHurtObject, HeartsIncludedCreature, \
     get_rect_from_mask, CanHurtObject, ItemsSpawner, PhysicalCreature
 
 
 class EnemyBlob(CutAnimatedSprite, PhysicalCreature, HeartsIncludedCreature, CantHurtObject,
                 ItemsSpawner):
+    """
+    класс слизня
+    """
     player_x: int
     player_y: int
     can_attack: bool
@@ -46,12 +49,20 @@ class EnemyBlob(CutAnimatedSprite, PhysicalCreature, HeartsIncludedCreature, Can
         HeartsIncludedCreature.__init__(self, 'enemy', health=health)
 
     def render(self, screen: pygame.Surface):
+        """
+        рендеринг объекта
+        :param screen: экран
+        """
         if not self.is_invisible:
             screen.blit(self.image, self.render_rect)
         if self.is_hurt and not self.is_invisible:
             self.show_hurt(screen)
 
     def update(self, game):
+        """
+        Обновление объекта
+        :param game: класс игры
+        """
         if self.wait_counter < 5:
             self.wait()
         else:
@@ -74,6 +85,11 @@ class EnemyBlob(CutAnimatedSprite, PhysicalCreature, HeartsIncludedCreature, Can
             pass
 
     def frames_handler(self, game):
+        """
+        Обработчик кадров объекта
+        :param game:
+        :return:
+        """
         if self.current_frame == 2:
             self.can_attack = True
         elif self.current_frame == 3:
@@ -86,24 +102,31 @@ class EnemyBlob(CutAnimatedSprite, PhysicalCreature, HeartsIncludedCreature, Can
 
     @staticmethod
     def get_player_position(game):
+        """
+        Получение координат игрока
+        :param game: класс игры
+        """
         return game.player.coords
 
     def move(self, game):
+        """
+        Передвижение объекта
+        :param game: класс игры
+        """
         if self.move_delay > 1 and self.can_move:
             self.player_x, self.player_y = self.get_player_position(game)
             if self.player_y > self.coords[1] + randint(0, 80) and self.collision_direction_y \
-                != \
-                'down':
+               != 'down':
                 self.coords[1] += self.speed
                 for rect in [self.render_rect, self.rect]:
                     rect.move_ip(0, self.speed)
             elif self.player_y < self.coords[1] + randint(0, 80) and self.collision_direction_y != \
-                'up':
+                 'up':
                 self.coords[1] -= self.speed
                 for rect in [self.render_rect, self.rect]:
                     rect.move_ip(0, -self.speed)
             if self.player_x - 400 > self.coords[0] + randint(-80, 80) < self.player_x + 400 and \
-                self.collision_direction_x != 'right':
+               self.collision_direction_x != 'right':
                 self.coords[0] += self.speed
                 for rect in [self.render_rect, self.rect]:
                     rect.move_ip(self.speed, 0)
@@ -115,6 +138,10 @@ class EnemyBlob(CutAnimatedSprite, PhysicalCreature, HeartsIncludedCreature, Can
         self.move_delay += self.move_delay + 0.01
 
     def attack(self, game):
+        """
+        атака игрока
+        :param game: класс игры
+        """
         if not self.can_attack:
             return
         dx = self.rect.x - game.player.mask_rect.x
@@ -130,25 +157,41 @@ class EnemyBlob(CutAnimatedSprite, PhysicalCreature, HeartsIncludedCreature, Can
         self.can_attack = False
 
     def on_collision(self, collided_sprite, game):
+        """
+        действия при столкновении
+        :param collided_sprite: объект с которым столкнулись
+        :param game: класс игры
+        """
         if isinstance(collided_sprite, Tears) or collided_sprite in game.creatures:
             return
         PhysicalCreature.on_collision(self, collided_sprite, game)
 
     def get_hurt(self, hurt_object):
+        """
+        Получение урона
+        :param hurt_object: Объект нанесший урон
+        """
         if isinstance(hurt_object, Tears) and hurt_object not in self.already_hurt_by and \
-            hurt_object.team == 'player':
+           hurt_object.team == 'player':
             HeartsIncludedCreature.get_hurt(self, hurt_object)
         if self.health <= 0:
             self.is_killed = True
 
     def disappear(self, game):
+        """
+        Исчезновение объекта
+        :param game: класс игры
+        """
         from items import HalfHeart, FullHeart
         self.explosion.render(game.screen)
         self.explosion.explode()
         if not self.item_spawned:
-            self.spawn_items([(HalfHeart, 0.5), (FullHeart, 0.2)], game)
+            self.spawn_items([(HalfHeart, 0.1), (FullHeart, 0.01)], game)
 
     def wait(self):
+        """
+        Ожидание между повторениями прыжка
+        """
         self.is_wait = True
         self.__counter += self.__counter / 3 + self.animation_speed
         if self.__counter >= 1:
@@ -164,12 +207,13 @@ class EnemyBlob(CutAnimatedSprite, PhysicalCreature, HeartsIncludedCreature, Can
 class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, CutAnimatedSprite,
                     ItemsSpawner):
     player_position: Any
-
+    """класс комара"""
     def __init__(self, coords, size):
         PhysicalCreature.__init__(self)
         CanHurtObject.__init__(self)
         ItemsSpawner.__init__(self)
         self.is_invisible = False
+        self.one_punch_object = False
         if size == 'big':
             self.speed = 1
             self.damage = 2
@@ -192,8 +236,7 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
         self.mask = pygame.mask.from_surface(self.image)
         self.mask_rect = get_rect_from_mask(self.mask)
 
-        self.attack_delay = 0
-        self.one_punch_object = False
+        self.attack_delay = 0.001
         self.explosion = Explosion(self, self.coords, (35, 40),
                                    explosion_size)
         self.is_killed = False
@@ -201,6 +244,10 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
         self.collision_direction_x = None
 
     def render(self, screen):
+        """
+        Рендеринг объекта на экран
+        :param screen: объект экрана
+        """
         if not self.is_invisible:
             screen.blit(self.image, self.rect)
             olist = self.mask.outline()
@@ -212,6 +259,9 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
             self.explosion.render(screen)
 
     def move(self):
+        """
+        Передвижение объекта
+        """
         dx = self.rect.x - self.player_position[0] + randint(-80, 80)
         dy = self.rect.y - self.player_position[1] + randint(-80, 80)
 
@@ -234,6 +284,10 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
             rect.y = self.coords[1]
 
     def update(self, game):
+        """
+        Обновление объекта
+        :param game: класс игры
+        """
         from items import HalfHeart, FullHeart
         self.player_position = game.player.coords
         self.mask = pygame.mask.from_surface(self.image)
@@ -251,17 +305,25 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
         if self.is_killed:
             self.explosion.update(game)
             self.explosion.explode()
-            self.spawn_items([(HalfHeart, 0.3), (FullHeart, 0.01)], game)
+            self.spawn_items([(HalfHeart, 0.1), (FullHeart, 0.01)], game)
         PhysicalCreature.update(self, game)
 
     def on_collision(self, collided_sprite, game):
+        """
+        :param collided_sprite: объект с которым столкнулись
+        :param game: игра
+        """
         if isinstance(collided_sprite, Tears) or collided_sprite in game.creatures:
             return
         PhysicalCreature.on_collision(self, collided_sprite, game)
 
     def get_hurt(self, hurt_object):
+        """
+        Получение урона
+        :param hurt_object: объект от которого получили урон
+        """
         if isinstance(hurt_object, Tears) and hurt_object not in self.already_hurt_by and \
-            hurt_object.team == 'player':
+           hurt_object.team == 'player':
             HeartsIncludedCreature.get_hurt(self, hurt_object)
         if self.health <= 0:
             self.is_killed = True
@@ -273,6 +335,7 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
 
 class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
     mask: pygame.mask.Mask
+    """класс игрока"""
 
     def __init__(self, coords: tuple):
 
@@ -302,12 +365,9 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
 
         self.speed = 4
 
-        self.action_sprites = dict()
-
         self.ammos_list = list()
 
-        self.attack_speed: float = 0.05
-        self.attack_delay = 0
+        self.attack_speed= 0.05
 
         self.image = pygame.Surface((self.head_sprite.image.get_width(),
                                      self.head_sprite.image.get_height() +
@@ -316,11 +376,6 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
         self.image.set_colorkey((0, 255, 0))
         self.image.blit(self.body_sprite.image, (10, 39))
         self.image.blit(self.head_sprite.image, (0, 0))
-
-        self.render_rect = pygame.Rect(*coords, self.body_sprite.image.get_width(),
-                                       self.body_sprite.image.get_height() +
-                                       self.head_sprite.image.get_height())
-
         self.rect = pygame.Rect((coords[0], coords[1],
                                  self.head_sprite.image.get_width(),
                                  self.head_sprite.image.get_height() +
@@ -337,8 +392,13 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
         PhysicalCreature.__init__(self)
         HeartsIncludedCreature.__init__(self, 'player', health)
         self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
+        self.attack_delay = 0
 
     def key_press_handler(self, event):
+        """
+        обработчик нажатий кнопок
+        :param event: на какую кнопку нажали
+        """
         if event.key == pygame.K_a:
             self.direction_x = 'left'
 
@@ -351,6 +411,10 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
             self.direction_y = 'down'
 
     def stop_move(self, event=None):
+        """
+        Остановка передвижения
+        :param event: Какая кнопка нажата
+        """
         keys = pygame.key.get_pressed()
         for i in [zip((pygame.K_a, pygame.K_d), ('left', 'right')),
                   zip((pygame.K_w, pygame.K_s), ('up', 'down'))]:
@@ -371,6 +435,10 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
             self.body_sprite.start('idle')
 
     def render(self, screen):
+        """
+        рендеринг объекта
+        :param screen: экран
+        """
         screen.blit(self.image, self.rect)
 
         if self.is_killed:
@@ -379,6 +447,10 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
             self.show_hurt(screen)
 
     def update(self, game):
+        """
+        Обновление объекта
+        :param game: класс игры
+        """
         if self.is_attack:
             update_body_parts = (self.body_sprite,)
         else:
@@ -432,37 +504,53 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
                 game.end_game()
 
     def move(self, direction_x, direction_y, collision_direction_x, collision_direction_y):
+        """
+        Передвижение
+        :param direction_x: В какую сторону движение по х
+        :param direction_y: В какую сторону движение по у
+        :param collision_direction_x: В какую сторону коллизия по х
+        :param collision_direction_y: В какую сторону коллизия по у
+        """
         if self.is_stopped:
             return
         if direction_x == 'left' and not collision_direction_x == 'left':
-            for rect in [self.rect, self.render_rect, self.head_sprite.rect,
+            for rect in [self.rect, self.head_sprite.rect,
                          self.body_sprite.rect, self.mask_rect]:
                 rect.move_ip(-self.speed, 0)
             self.coords[0] -= self.speed
         elif direction_x == 'right' and not collision_direction_x == 'right':
-            for rect in [self.rect, self.render_rect, self.head_sprite.rect,
+            for rect in [self.rect, self.head_sprite.rect,
                          self.body_sprite.rect, self.mask_rect]:
                 rect.move_ip(self.speed, 0)
             self.coords[0] += self.speed
         if direction_y == 'up' and not collision_direction_y == 'up':
-            for rect in [self.rect, self.render_rect, self.head_sprite.rect,
+            for rect in [self.rect, self.head_sprite.rect,
                          self.body_sprite.rect, self.mask_rect]:
                 rect.move_ip(0, -self.speed)
             self.coords[1] -= self.speed
         elif direction_y == 'down' and not collision_direction_y == 'down':
-            for rect in [self.rect, self.render_rect, self.head_sprite.rect,
+            for rect in [self.rect, self.head_sprite.rect,
                          self.body_sprite.rect, self.mask_rect]:
                 rect.move_ip(0, self.speed)
             self.coords[1] += self.speed
 
     def move_to_position(self, x, y):
+        """
+        Перевдижение на данную позицию
+        :param x: х координата
+        :param y: у координата
+        """
         self.coords = [x, y]
-        for rect in [self.rect, self.render_rect, self.head_sprite.rect,
+        for rect in [self.rect, self.head_sprite.rect,
                      self.body_sprite.rect, self.mask_rect]:
             rect.x = x
             rect.y = y
 
     def attack(self, game):
+        """
+        Атака
+        :param game: игра
+        """
         team = 'player'
         self.attack_delay += self.attack_delay / 2.5 + self.attack_speed * 0.0001
         if self.attack_delay < 1:
@@ -497,40 +585,29 @@ class Player(PhysicalCreature, CantHurtObject, HeartsIncludedCreature):
         else:
             self.is_attack = False
 
-    # def on_collision(self, collided_sprite, game):
-    #     if collided_sprite.mask_rect.right > self.mask_rect.left > \
-    #         collided_sprite.mask_rect.right - 15:
-    #         print('left', collided_sprite.mask_rect.right > self.mask_rect.left > \
-    #         collided_sprite.mask_rect.right - 15)
-    #         pass
-    #     else:
-    #         print('left', collided_sprite.mask_rect.right > self.mask_rect.left > \
-    #         collided_sprite.mask_rect.right - 15)
-    #         pass
-    #
-    #     if collided_sprite.mask_rect.top < self.mask_rect.bottom < collided_sprite.mask_rect.top \
-    #         + 10:
-    #         print('down', collided_sprite.mask_rect.top < self.mask_rect.bottom < collided_sprite.mask_rect.top \
-    #         + 10)
-    #         pass
-    #     else:
-    #         print('down', collided_sprite.mask_rect.top < self.mask_rect.bottom < collided_sprite.mask_rect.top \
-    #         + 10)
-    #         pass
-    #
-    #     print()
-
     def absence_collision(self, game):
+        """
+        Что происходит при отсутсвтивии столкновения
+        :param game: игра
+        """
         self.collision_direction_x, self.collision_direction_y = None, None
 
     def get_hurt(self, hurt_object):
+        """
+        Получить урон
+        :param hurt_object: от какого объекта получен урон
+        """
         if (isinstance(hurt_object, Tears) or isinstance(hurt_object, EnemyMosquito)) and \
-            hurt_object not in self.already_hurt_by and hurt_object.team == 'enemy':
+           hurt_object not in self.already_hurt_by and hurt_object.team == 'enemy':
             HeartsIncludedCreature.get_hurt(self, hurt_object)
         if self.health <= 0:
             self.is_killed = True
 
     def heal(self, health):
+        """
+        Повысить колво хп
+        :param health: на какое колво повысить хп
+        """
         if self.health + health <= self.max_health:
             self.health += health
         elif self.health + health > self.max_health:

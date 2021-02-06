@@ -1,10 +1,13 @@
 import math
 import pygame
-from core import load_image
+from pygame.sprite import Sprite
+
+from core import load_image, Text
 
 
-class HealthBar:
+class HealthBar(Sprite):
     def __init__(self, game):
+        Sprite.__init__(self)
         self.game = game
         self.player_health = game.player.health
         self.health_surface = pygame.Surface((200, 50))
@@ -15,9 +18,17 @@ class HealthBar:
         self.half_heart = load_image('assets/room/half_heart.png', (40, 40))
 
     def render(self, screen):
+        """
+        рендер объекта
+        :param screen: экран
+        """
         screen.blit(self.health_surface, self.rect)
 
     def update(self, game):
+        """
+        обновление
+        :param game: игра
+        """
         self.player_health = game.player.health
         self.health_surface.fill((30, 30, 30))
         health = self.player_health
@@ -31,4 +42,14 @@ class HealthBar:
             health -= 2
 
     def add_internal(self, arg):
+        """
+        не знаю что, но, без него появляется ошибка
+        :param arg: какой то аргумент
+        """
         pass
+
+
+class RoomsCounterText(Text, Sprite):
+
+    def update(self, game):
+        self.set_text(f'Комнат пройдено: {len(game.rooms_seeds_dict.keys()) - 1}')
