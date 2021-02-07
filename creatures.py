@@ -237,8 +237,7 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
         self.mask_rect = get_rect_from_mask(self.mask)
 
         self.attack_delay = 0.001
-        self.explosion = Explosion(self, self.coords, (35, 40),
-                                   explosion_size)
+        self.explosion = Explosion(self, self.coords, (35, 40), explosion_size)
         self.is_killed = False
         self.collision_direction_y = None
         self.collision_direction_x = None
@@ -250,11 +249,8 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
         """
         if not self.is_invisible:
             screen.blit(self.image, self.rect)
-            olist = self.mask.outline()
-            pygame.draw.polygon(self.show_hurt_surface, (0, 255, 0), olist, 0)
-            screen.blit(self.show_hurt_surface, (self.rect.x, self.rect.y))
-        if self.is_hurt:
-            self.show_hurt(screen)
+            if self.is_hurt:
+                self.show_hurt(screen)
         if self.is_killed:
             self.explosion.render(screen)
 
@@ -293,18 +289,18 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
         self.mask = pygame.mask.from_surface(self.image)
         self.mask_rect = get_rect_from_mask(self.mask).move(self.coords)
         CutAnimatedSprite.update(self, game)
+        HeartsIncludedCreature.update(self, game)
 
         if self.hurt_delay >= 1:
             self.is_hurt = False
         self.hurt_delay += self.hurt_delay / 3 + 0.01
         self.move()
-        HeartsIncludedCreature.update(self, game)
+
         self.attack_delay += self.attack_delay / 5 + self.attack_speed
         if self.attack_delay >= 1 and pygame.sprite.collide_mask(self, game.player):
             self.attack(game.player)
         if self.is_killed:
             self.explosion.update(game)
-            self.explosion.explode()
             self.spawn_items([(HalfHeart, 0.1), (FullHeart, 0.01)], game)
         PhysicalCreature.update(self, game)
 
@@ -327,6 +323,7 @@ class EnemyMosquito(PhysicalCreature, CanHurtObject, HeartsIncludedCreature, Cut
             HeartsIncludedCreature.get_hurt(self, hurt_object)
         if self.health <= 0:
             self.is_killed = True
+            self.explosion.explode()
 
     def attack(self, player):
         self.attack_delay = 0
