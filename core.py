@@ -356,7 +356,7 @@ class SpriteObject(pygame.sprite.Sprite):
     поэтому для урпощения жизни были добавлены параметры для создания изображения вместе с спрайтом
     """
 
-    def __init__(self, image_path, coords, size= None):
+    def __init__(self, image_path, coords, size=None):
         super().__init__()
         self.image_path = image_path
         self.size = size
